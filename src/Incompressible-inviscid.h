@@ -5,18 +5,20 @@
 
 struct cell
 {  
-    float u = 0;
-    float v = 0;
+    float u = 0; // x velocity
+    float v = 0; // y velocity
     float density = 1;
 };
 
-static cell MESH[100][100];
+static const size_t MESH_width = 100;
+static const size_t MESH_height = 100;
+static cell MESH[MESH_width][MESH_height];
 
 static float dt;
 
 int main();
 void ExternalForce();
-void Divergence( uint8_t iterations );
+void Divergence( uint8_t iterations, float Relaxation );
 void Advection();
 
 #endif

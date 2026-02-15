@@ -2,8 +2,8 @@
 
 static const size_t MESH_width = 800;
 static const size_t MESH_height = 400;
-static const double MESH_SIZE = 0.05; // size of each cell in m
-static const double FLOW_VEL = 10;
+static const double MESH_SIZE = 0.005; // size of each cell in m
+static const double FLOW_VEL = 1;
 static const double density = 1.225; // density in kg / m^3
 
 static const double dt = 0.05/3 * 0.2 ; // time step in sec should be < MESH_SIZE / Flow Velocity
@@ -11,9 +11,9 @@ static const double dt = 0.05/3 * 0.2 ; // time step in sec should be < MESH_SIZ
 static const bool PRINT_P = 0;
 static const bool PRINT_V = 0;
 static const bool PRINT_U = 0;
-static const bool PRINT_DEN = 0;
+static const bool PRINT_DEN = 1;
 static const bool PRINT_DIV = 0;
-static const bool PRINT_VEL = 1;
+static const bool PRINT_VEL = 0;
 
 static std::vector< std::vector< cell > > MESH( MESH_height, std::vector<cell>(MESH_width) );;
 static auto TEMP = MESH; 
@@ -24,15 +24,19 @@ int main()
 {
     for( size_t r = 0; r < MESH_height; ++r )
     {
-        if( r > MESH_height/2 - 40 && r < MESH_height/2 + 30 )
+        if( r > MESH_height/2 - 30 && r < MESH_height/2 + 30 )
         {
             MESH[r][0].density=0.5;
         }
-
+        //Left side treatment
         MESH[r][0].Fluid = 0;
         MESH[r][1].u = FLOW_VEL;
+        MESH[r][0].u = FLOW_VEL;
+
+        //right side treatment
         MESH[r][MESH_width-1].Fluid = 0;
         MESH[r][MESH_width-1].u = FLOW_VEL;
+    
         
         for( size_t c = 0; c < MESH_width; ++c )
         {
@@ -44,13 +48,10 @@ int main()
                 MESH[r][c].Fluid = 0;
                 continue;
             }
-
-            
-
             
 
             MESH[0][c].Fluid = 0; // bottom treatment
-            MESH[1][c].u = FLOW_VEL; 
+            MESH[0][c].u = FLOW_VEL; 
             MESH[MESH_height-1][c].Fluid = 0; // top treatment
             MESH[MESH_height-1][c].u = FLOW_VEL; 
         }
@@ -62,12 +63,12 @@ int main()
         for( size_t c = 1; c < MESH_width - 1; ++c )
         {
             // FIX THIS SO THAT BOUNDARY EDGES DONT GET ASSIGNED VELOCITIES THAT NEVER CHANGE
-            if( MESH[r][c-1].Fluid && MESH[r-1][c].Fluid && MESH[r+1][c].Fluid && MESH[r][c+1].Fluid )
+            if( MESH[r][c-1].Fluid && MESH[r][c].Fluid )
                 MESH[r][c].u = FLOW_VEL;
         }
     }
     
-    Divergence( 10000, 1.9 );
+    Divergence( 1000, 1.9 );
 
     size_t t = 0;
 
@@ -128,8 +129,8 @@ void Divergence( size_t iterations, double Relaxation )
                 Div *= Relaxation;
 
                 //make the divergence of this cell 0 while leaving out boundary edges
-                MESH[row][col].u += Div * MESH[row-1][col].Fluid / neighbors;
-                MESH[row][col].v += Div * MESH[row][col-1].Fluid / neighbors;
+                MESH[row][col].u += Div * MESH[row][col-1].Fluid / neighbors;
+                MESH[row][col].v += Div * MESH[row-1][col].Fluid / neighbors;
                 MESH[row+1][col].v -= Div * MESH[row+1][col].Fluid / neighbors;
                 MESH[row][col+1].u -= Div * MESH[row][col+1].Fluid / neighbors;
 

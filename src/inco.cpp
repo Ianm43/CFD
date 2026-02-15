@@ -9,9 +9,9 @@ static const double density = 1.225; // density in kg / m^3
 static const double dt = 0.05/3 * 0.2 ; // time step in sec should be < MESH_SIZE / Flow Velocity
 
 static const bool PRINT_P = 0;
-static const bool PRINT_V = 1;
+static const bool PRINT_V = 0;
 static const bool PRINT_U = 0;
-static const bool PRINT_DEN = 0;
+static const bool PRINT_DEN = 1;
 static const bool PRINT_DIV = 0;
 static const bool PRINT_VEL = 0;
 
@@ -24,7 +24,7 @@ int main()
 {
     for( size_t r = 0; r < MESH_height; ++r )
     {
-        if( r > MESH_height/2 - 30 && r < MESH_height/2 + 30 )
+        if( r > MESH_height/2 - 40 && r < MESH_height/2 + 30 )
         {
             MESH[r][0].density=0.5;
         }
@@ -151,28 +151,28 @@ void Advection()
 
                 c_vert = ( X_vert / MESH_SIZE );
                 //c_vert *= !( c_vert < 0 ); 
-                if( c_vert > (long long)MESH_width - 2 ){ c_vert = MESH_width - 2; }
+                //if( c_vert > (long long)MESH_width - 2 ){ c_vert = MESH_width - 2; }
                 assert( c_vert <= (long long)MESH_width - 2 && c_vert >= 0);
 
                 r_vert =  ( Y_vert / MESH_SIZE );
                 //r_vert *= !( r_vert < 0 );
-                if( r_vert > (long long)MESH_height - 2 ){ r_vert = MESH_height - 2; }
+                //if( r_vert > (long long)MESH_height - 2 ){ r_vert = MESH_height - 2; }
 
                 c_horz =  ( X_horz / MESH_SIZE );
                 //c_horz *= !( c_horz < 0 );
-                if( c_horz > (long long)MESH_width - 2 ){ c_horz = MESH_width - 2; }
+                //if( c_horz > (long long)MESH_width - 2 ){ c_horz = MESH_width - 2; }
 
                 r_horz = ( Y_horz / MESH_SIZE );
                 //r_horz *= !( r_horz < 0 );
-                if( r_horz > (long long)MESH_height - 2 ){ r_horz = MESH_height - 2; }
+                //if( r_horz > (long long)MESH_height - 2 ){ r_horz = MESH_height - 2; }
 
                 c_den = ( X_horz / MESH_SIZE );
                 //c_den *= !( c_den < 0 );
-                if( c_den > (long long)MESH_width - 2 ){ c_den = MESH_width - 2; }
+                //if( c_den > (long long)MESH_width - 2 ){ c_den = MESH_width - 2; }
 
                 r_den = ( Y_vert / MESH_SIZE );
                 //r_den *= !( r_den < 0 );
-                if( r_den > (long long)MESH_height - 2 ){ r_den = MESH_height - 2; }
+                //if( r_den > (long long)MESH_height - 2 ){ r_den = MESH_height - 2; }
 
             // get average velocities around position
             /*
@@ -258,20 +258,27 @@ void Bitmap( vector< std::vector< cell > > & Img_Data, std::string &filename )
     {
         for( cell const &VALUE : ROW )
         {
-
             // Assign color based on tile value
-            VEL = sqrt( VALUE.u*VALUE.u + VALUE.v*VALUE.v );
 
-            PRINT_VAL = ( (VALUE.p-MIN.p*(MIN.p<0)) * PRINT_P + (VALUE.u-MIN.u*(MIN.p<0)) * PRINT_U + (VALUE.v-MIN.v*(MIN.v<0)) * PRINT_V + (VALUE.divergence-MIN.divergence*(MIN.divergence<0)) * PRINT_DIV + VEL * PRINT_VEL )/BIGGEST + PRINT_DEN * VALUE.density;
+            VEL = sqrt( VALUE.u*VALUE.u + VALUE.v*VALUE.v );
+            PRINT_VAL = ( (VALUE.p-MIN.p*(MIN.p<0)) * PRINT_P + (VALUE.u-MIN.u*(MIN.p<0)) * PRINT_U + (VALUE.v-MIN.v*(MIN.v<0)) * PRINT_V + (VALUE.divergence-MIN.divergence*(MIN.divergence<0)) * PRINT_DIV + VEL * PRINT_VEL )/BIGGEST;
 
             if ((PRINT_VAL * 255) > 255 || (PRINT_VAL * 255) < 0)
             {
                 cout << "PRINT_VAL: " + to_string(PRINT_VAL) << endl;
             }
 
-            pixel.Red = (uint8_t)( ( PRINT_VAL * 255 ) );
-            pixel.Green = (uint8_t)( ( PRINT_VAL ) );
-            pixel.Blue = (uint8_t)( ( 255 - PRINT_VAL * 255 ) );
+            if( !PRINT_DEN )
+            {
+                pixel.Red   = (uint8_t)( ( PRINT_VAL * 255 ) );
+                pixel.Green = (uint8_t)( ( PRINT_VAL * 0 )  );
+                pixel.Blue  = (uint8_t)( ( 255 - PRINT_VAL * 255 ) );
+            }else
+            {
+                pixel.Red   = (uint8_t)( ( VALUE.density * 255 ) );
+                pixel.Green = (uint8_t)( ( VALUE.density * 255 ) );
+                pixel.Blue  = (uint8_t)( ( VALUE.density * 255 ) );
+            }
 
             if( !VALUE.Fluid )
             {

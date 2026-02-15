@@ -16,14 +16,14 @@ HEADERS:= $(wildcard *.h)
 
 .PHONY : all, clean
 
-all : $(TARGET)
+all : $(TARGET) 
 
-$(TARGET) : $(OBJECTS)
+$(TARGET) : $(SOURCES) $(HEADERS)
 	@mkdir -p $(BIN_DIR)
 	$(CXX) $(CXXFLAGS) $(SOURCES) $(HEADERS) -o $(TARGET)
 
-run : INCO.exe
-	./INCO
+run : $(TARGET)
+	./$(TARGET)
 clean :
 	rm -f INCO.exe
 

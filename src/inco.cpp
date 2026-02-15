@@ -1,17 +1,17 @@
 #include "inco.h"
 
-static const size_t MESH_width = 400;
-static const size_t MESH_height = 200;
-static const double MESH_SIZE = 0.05; // size of each cell in m
-static const double FLOW_VEL = 10;
+static const size_t MESH_width = 800;
+static const size_t MESH_height = 400;
+static const double MESH_SIZE = 0.005; // size of each cell in m
+static const double FLOW_VEL = 2;
 static const double density = 1.225; // density in kg / m^3
 
-static const double dt = 0.05/3 * 0.8 ; // time step in sec should be MESH_SIZE / INFLOW VEL
+static const double dt = 0.05/3 * 0.2 ; // time step in sec should be < MESH_SIZE / Flow Velocity
 
 static const bool PRINT_P = 0;
-static const bool PRINT_V = 0;
+static const bool PRINT_V = 1;
 static const bool PRINT_U = 0;
-static const bool PRINT_DEN = 1;
+static const bool PRINT_DEN = 0;
 static const bool PRINT_DIV = 0;
 static const bool PRINT_VEL = 0;
 
@@ -24,7 +24,7 @@ int main()
 {
     for( size_t r = 0; r < MESH_height; ++r )
     {
-        if( r > MESH_height/2 - 20 && r < MESH_height/2 + 20 )
+        if( r > MESH_height/2 - 30 && r < MESH_height/2 + 30 )
         {
             MESH[r][0].density=0.5;
         }
@@ -34,26 +34,32 @@ int main()
         
         for( size_t c = 0; c < MESH_width; ++c )
         {
-            if(( ((double)r-MESH_height/2)*((double)r-MESH_height/2) + ((double)c-MESH_width/3)*((double)c-MESH_width/3) ) < ( MESH_height*MESH_height / 36) )
+            if( ( ((double)r-MESH_height/2+1)*((double)r-MESH_height/2+1) + ((double)c-MESH_width/4)*((double)c-MESH_width/4) ) < ( MESH_height*MESH_height / 80) )
             {
                 MESH[r][c].Fluid = 0;
                 continue;
             }
             MESH[r][c].u = FLOW_VEL;
 
+            
+
             MESH[0][c].Fluid = 0; // bottom treatment
+            MESH[0][c].u = 0;
             MESH[MESH_height-1][c].Fluid = 0; // top treatment
+            MESH[MESH_height-1][c].u = 0;
         }
 
     }
 
+    Divergence( 1000, 1.9 );
+
     size_t t = 0;
 
-    while( t < 1000 )
+    while( t < 10000 )
     {
-        ExternalForce();
+        //ExternalForce();
 
-        Divergence( 60, 1.9 );
+        Divergence( 100, 1.9 );
 
         Advection();
 
@@ -77,20 +83,19 @@ void ExternalForce()
     {
         for( auto &CELL : row )
         {
-            CELL.v -= 1 * dt * ( CELL.Fluid );
+            CELL.v -= 9.8 * dt * ( CELL.Fluid );
         }
     }
 
 }
 
-void Divergence( uint8_t iterations, double Relaxation )
+void Divergence( size_t iterations, double Relaxation )
 {
     uint8_t neighbors = 0;
     double Div = 0;
 
-    for( uint8_t i = 0; i <= iterations; ++i )
+    for( size_t i = 0; i <= iterations; ++i )
     {
-
         for( size_t row = 1; row < MESH_height - 1; ++row )
         {
             for( size_t col = 1; col < MESH_width - 1; ++col  )
@@ -234,7 +239,7 @@ void Bitmap( vector< std::vector< cell > > & Img_Data, std::string &filename )
     cell MAX = MAX_CELL();
     cell MIN = MIN_CELL();
     
-    assert( MAX.p != MIN.p );
+    //assert( MAX.p != MIN.p );
     
     MAX.u -= MIN.u * (MIN.u < 0);
     MAX.v -= MIN.v * (MIN.v < 0);
@@ -259,12 +264,14 @@ void Bitmap( vector< std::vector< cell > > & Img_Data, std::string &filename )
 
             PRINT_VAL = ( (VALUE.p-MIN.p*(MIN.p<0)) * PRINT_P + (VALUE.u-MIN.u*(MIN.p<0)) * PRINT_U + (VALUE.v-MIN.v*(MIN.v<0)) * PRINT_V + (VALUE.divergence-MIN.divergence*(MIN.divergence<0)) * PRINT_DIV + VEL * PRINT_VEL )/BIGGEST + PRINT_DEN * VALUE.density;
 
-            assert( (PRINT_VAL*255) <= 255 && (PRINT_VAL*255) >= 0 );
-
+            if ((PRINT_VAL * 255) > 255 || (PRINT_VAL * 255) < 0)
+            {
+                cout << "PRINT_VAL: " + to_string(PRINT_VAL) << endl;
+            }
 
             pixel.Red = (uint8_t)( ( PRINT_VAL * 255 ) );
-            pixel.Green = (uint8_t)( ( PRINT_VAL * 255 ) );
-            pixel.Blue = (uint8_t)( ( PRINT_VAL * 255 ) );
+            pixel.Green = (uint8_t)( ( PRINT_VAL ) );
+            pixel.Blue = (uint8_t)( ( 255 - PRINT_VAL * 255 ) );
 
             if( !VALUE.Fluid )
             {

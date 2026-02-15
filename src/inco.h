@@ -22,7 +22,7 @@ struct cell
 
 int main(); // function declerations should be put before static variables
 void ExternalForce();
-void Divergence( uint8_t iterations, double Relaxation );
+void Divergence( size_t iterations, double Relaxation );
 void Advection();
 cell GetEdgeAverage( size_t r, size_t c );
 cell MAX_CELL();

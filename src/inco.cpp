@@ -1,6 +1,6 @@
 #include "inco.h"
 
-static const size_t MESH_width = 800;
+static const size_t MESH_width = 1000;
 static const size_t MESH_height = 400;
 static const double MESH_SIZE = 0.005; // size of each cell in m
 static const double FLOW_VEL = 1;
@@ -78,7 +78,7 @@ int main()
 
         Advection();
 
-        Divergence( 100, 1.9 );
+        Divergence( 60, 1.9 );
 
         if( t % 100 == 0 )
         {

@@ -1,3 +1,4 @@
 # gitgnore pattern to igonre solution data
 
-Solution_Data/*
+Solution_Data/*.bmp
+.vscode/*.json

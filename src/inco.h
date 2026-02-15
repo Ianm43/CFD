@@ -24,17 +24,13 @@ int main(); // function declerations should be put before static variables
 void ExternalForce();
 void Divergence( size_t iterations, double Relaxation );
 void Advection();
-cell GetEdgeAverage( size_t r, size_t c );
 cell MAX_CELL();
 cell MIN_CELL();
 
 cell GetWeightedCellAverage( size_t r, size_t c, double x, double y );
-
-
-
-
-
 void Bitmap( std::vector< std::vector< cell > > &Img_Data, std::string &filename );
+
+
 
 
 

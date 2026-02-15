@@ -2,8 +2,8 @@
 
 static const size_t MESH_width = 800;
 static const size_t MESH_height = 400;
-static const double MESH_SIZE = 0.005; // size of each cell in m
-static const double FLOW_VEL = 2;
+static const double MESH_SIZE = 0.05; // size of each cell in m
+static const double FLOW_VEL = 10;
 static const double density = 1.225; // density in kg / m^3
 
 static const double dt = 0.05/3 * 0.2 ; // time step in sec should be < MESH_SIZE / Flow Velocity
@@ -11,9 +11,9 @@ static const double dt = 0.05/3 * 0.2 ; // time step in sec should be < MESH_SIZ
 static const bool PRINT_P = 0;
 static const bool PRINT_V = 0;
 static const bool PRINT_U = 0;
-static const bool PRINT_DEN = 1;
+static const bool PRINT_DEN = 0;
 static const bool PRINT_DIV = 0;
-static const bool PRINT_VEL = 0;
+static const bool PRINT_VEL = 1;
 
 static std::vector< std::vector< cell > > MESH( MESH_height, std::vector<cell>(MESH_width) );;
 static auto TEMP = MESH; 
@@ -30,38 +30,54 @@ int main()
         }
 
         MESH[r][0].Fluid = 0;
+        MESH[r][1].u = FLOW_VEL;
         MESH[r][MESH_width-1].Fluid = 0;
+        MESH[r][MESH_width-1].u = FLOW_VEL;
         
         for( size_t c = 0; c < MESH_width; ++c )
         {
-            if( ( ((double)r-MESH_height/2+1)*((double)r-MESH_height/2+1) + ((double)c-MESH_width/4)*((double)c-MESH_width/4) ) < ( MESH_height*MESH_height / 80) )
+            //add a circle of solid mesh zones 
+            if( ( (r-(float)MESH_height/2)*(r-(float)MESH_height/2) + (c-(float)MESH_width/4)*(c-(float)MESH_width/4) ) <= ( MESH_height*MESH_height / 85 ) )
             {
+                MESH[r][c].u = 0;
+                MESH[r][c].v = 0;
                 MESH[r][c].Fluid = 0;
                 continue;
             }
-            MESH[r][c].u = FLOW_VEL;
+
+            
 
             
 
             MESH[0][c].Fluid = 0; // bottom treatment
-            MESH[0][c].u = 0;
+            MESH[1][c].u = FLOW_VEL; 
             MESH[MESH_height-1][c].Fluid = 0; // top treatment
-            MESH[MESH_height-1][c].u = 0;
+            MESH[MESH_height-1][c].u = FLOW_VEL; 
         }
 
     }
-
-    Divergence( 1000, 1.9 );
+    
+    for( size_t r = 1; r < MESH_height - 1; ++r )
+    {
+        for( size_t c = 1; c < MESH_width - 1; ++c )
+        {
+            // FIX THIS SO THAT BOUNDARY EDGES DONT GET ASSIGNED VELOCITIES THAT NEVER CHANGE
+            if( MESH[r][c-1].Fluid && MESH[r-1][c].Fluid && MESH[r+1][c].Fluid && MESH[r][c+1].Fluid )
+                MESH[r][c].u = FLOW_VEL;
+        }
+    }
+    
+    Divergence( 10000, 1.9 );
 
     size_t t = 0;
 
-    while( t < 10000 )
+    while( t <= 10000 )
     {
         //ExternalForce();
 
-        Divergence( 100, 1.9 );
-
         Advection();
+
+        Divergence( 100, 1.9 );
 
         if( t % 100 == 0 )
         {
@@ -100,20 +116,25 @@ void Divergence( size_t iterations, double Relaxation )
         {
             for( size_t col = 1; col < MESH_width - 1; ++col  )
             {
+                //skip over non-fluid cells
                 if( !MESH[row][col].Fluid ){ continue; }
+
                 neighbors = MESH[row-1][col].Fluid + MESH[row+1][col].Fluid + MESH[row][col+1].Fluid + MESH[row][col-1].Fluid;
                 Div = (-MESH[row][col].u - MESH[row][col].v + MESH[row+1][col].v + MESH[row][col+1].u);
                 
+                //store the divergence values for visualization
                 MESH[row][col].divergence = Div;
 
                 Div *= Relaxation;
 
-                MESH[row][col].u += Div * (double)MESH[row-1][col].Fluid / (double)neighbors;
-                MESH[row][col].v += Div * (double)MESH[row][col-1].Fluid / (double)neighbors;
-                MESH[row+1][col].v -= Div * (double)MESH[row+1][col].Fluid / (double)neighbors;
-                MESH[row][col+1].u -= Div * (double)MESH[row][col+1].Fluid / (double)neighbors;
+                //make the divergence of this cell 0 while leaving out boundary edges
+                MESH[row][col].u += Div * MESH[row-1][col].Fluid / neighbors;
+                MESH[row][col].v += Div * MESH[row][col-1].Fluid / neighbors;
+                MESH[row+1][col].v -= Div * MESH[row+1][col].Fluid / neighbors;
+                MESH[row][col+1].u -= Div * MESH[row][col+1].Fluid / neighbors;
 
-                MESH[row][col].p += Div/(double)neighbors * (density * MESH_SIZE )/dt;
+                // estimate kinetic pressure
+                MESH[row][col].p -= Div / neighbors *  density * MESH_SIZE / dt;
                 
             }
         }
@@ -134,7 +155,9 @@ void Advection()
     {
         for( size_t c = 1; c < MESH_width - 1; ++c )
         {
+            //skip non fluid cells
             if( !MESH[r][c].Fluid ){ continue; }
+
             //get average velocities around each edge and look back
 
                 X_vert = (double)c*MESH_SIZE - ( (MESH[r][c].u + MESH[r-1][c].u + MESH[r][c+1].u + MESH[r-1][c+1].u) / 4.0 ) * dt;
@@ -151,28 +174,28 @@ void Advection()
 
                 c_vert = ( X_vert / MESH_SIZE );
                 //c_vert *= !( c_vert < 0 ); 
-                //if( c_vert > (long long)MESH_width - 2 ){ c_vert = MESH_width - 2; }
+                if( c_vert > (long long)MESH_width - 2 ){ c_vert = MESH_width - 2; }
                 assert( c_vert <= (long long)MESH_width - 2 && c_vert >= 0);
 
                 r_vert =  ( Y_vert / MESH_SIZE );
                 //r_vert *= !( r_vert < 0 );
-                //if( r_vert > (long long)MESH_height - 2 ){ r_vert = MESH_height - 2; }
+                if( r_vert > (long long)MESH_height - 2 ){ r_vert = MESH_height - 2; }
 
                 c_horz =  ( X_horz / MESH_SIZE );
                 //c_horz *= !( c_horz < 0 );
-                //if( c_horz > (long long)MESH_width - 2 ){ c_horz = MESH_width - 2; }
+                if( c_horz > (long long)MESH_width - 2 ){ c_horz = MESH_width - 2; }
 
                 r_horz = ( Y_horz / MESH_SIZE );
                 //r_horz *= !( r_horz < 0 );
-                //if( r_horz > (long long)MESH_height - 2 ){ r_horz = MESH_height - 2; }
+                if( r_horz > (long long)MESH_height - 2 ){ r_horz = MESH_height - 2; }
 
                 c_den = ( X_horz / MESH_SIZE );
                 //c_den *= !( c_den < 0 );
-                //if( c_den > (long long)MESH_width - 2 ){ c_den = MESH_width - 2; }
+                if( c_den > (long long)MESH_width - 2 ){ c_den = MESH_width - 2; }
 
                 r_den = ( Y_vert / MESH_SIZE );
                 //r_den *= !( r_den < 0 );
-                //if( r_den > (long long)MESH_height - 2 ){ r_den = MESH_height - 2; }
+                if( r_den > (long long)MESH_height - 2 ){ r_den = MESH_height - 2; }
 
             // get average velocities around position
             /*
@@ -187,18 +210,18 @@ void Advection()
             assert( ( X_horz - (double)c_horz * MESH_SIZE ) / MESH_SIZE >= 0 && ( X_horz - (double)c_horz * MESH_SIZE ) / MESH_SIZE <= 1 );
             */
 
-            TEMP[r][c].u = GetWeightedCellAverage( (size_t)r_horz, (size_t)c_horz, ( X_horz - (double)c_horz * MESH_SIZE ) / MESH_SIZE, ( Y_horz - (double)r_horz*MESH_SIZE ) / MESH_SIZE ).u;//((c-c_horz)*(double)MESH_SIZE - X_horz) / (double)MESH_SIZE, ((r-r_horz)*(double)MESH_SIZE - Y_horz) / (double)MESH_SIZE ).u;
+            TEMP[r][c].u = GetWeightedCellAverage( (size_t)r_horz, (size_t)c_horz, ( X_horz - (double)c_horz * MESH_SIZE ) / MESH_SIZE, ( Y_horz - (double)r_horz*MESH_SIZE ) / MESH_SIZE ).u;
 
-            TEMP[r][c].v = GetWeightedCellAverage( (size_t)r_vert, (size_t)c_vert, ( X_vert - (double)c_vert * MESH_SIZE ) / MESH_SIZE, ( Y_vert - (double)r_vert*MESH_SIZE ) / MESH_SIZE ).v;//((c-c_vert)*(double)MESH_SIZE - X_vert) / (double)MESH_SIZE, ((r-r_vert)*(double)MESH_SIZE - Y_vert) / (double)MESH_SIZE  ).v;
+            TEMP[r][c].v = GetWeightedCellAverage( (size_t)r_vert, (size_t)c_vert, ( X_vert - (double)c_vert * MESH_SIZE ) / MESH_SIZE, ( Y_vert - (double)r_vert*MESH_SIZE ) / MESH_SIZE ).v;
 
-            TEMP[r][c].density = GetWeightedCellAverage( (size_t)r_den, (size_t)c_den, ( X_horz - (double)c_den * MESH_SIZE ) / MESH_SIZE, ( Y_vert - (double)r_den*MESH_SIZE ) / MESH_SIZE).density;//((c-c_den)*(double)MESH_SIZE - X_horz) / (double)MESH_SIZE, ((r-r_den)*(double)MESH_SIZE - Y_vert) / (double)MESH_SIZE ).density;
+            TEMP[r][c].density = GetWeightedCellAverage( (size_t)r_den, (size_t)c_den, ( X_horz - (double)c_den * MESH_SIZE ) / MESH_SIZE, ( Y_vert - (double)r_den*MESH_SIZE ) / MESH_SIZE).density;
 
         }
     }
     MESH = TEMP;
 }
 
-cell GetWeightedCellAverage( size_t r, size_t c, double x, double y )// x and y give the local position within the "cell"
+cell GetWeightedCellAverage( size_t r, size_t c, double x, double y )// x and y are assumed to be between 0 and 1
 {
     cell AveragedCell;
 

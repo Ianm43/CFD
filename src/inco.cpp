@@ -1,13 +1,8 @@
 #include "inco.h"
 
-static const size_t MESH_width = 1000;
-static const size_t MESH_height = 400;
-static const double MESH_SIZE = 0.005; // size of each cell in m
-static const double FLOW_VEL = 1;
-static const double density = 1.225; // density in kg / m^3
-
-static const double dt = 0.05/3 * 0.2 ; // time step in sec should be < MESH_SIZE / Flow Velocity
-
+// SIMULATION CONTROLS
+static const size_t TIMESTEPS = 10000;
+static const size_t REPORT_INTERVAL = 100;
 static const bool PRINT_P = 0;
 static const bool PRINT_V = 0;
 static const bool PRINT_U = 0;
@@ -15,6 +10,17 @@ static const bool PRINT_DEN = 1;
 static const bool PRINT_DIV = 0;
 static const bool PRINT_VEL = 0;
 
+// MESH DEFINITIONS
+static const size_t MESH_width = 1000;
+static const size_t MESH_height = 400;
+static const double MESH_SIZE = 0.005; // size of each cell in m
+
+// PHYSICAL CONSTANTS
+static const double FLOW_VEL = 1;
+static const double density = 1.225; // density in kg / m^3
+static const double dt = 0.05/3 * 0.2 ; // time step in sec should be < MESH_SIZE / Flow Velocity
+
+// MESH and temporary contanor for advection step
 static std::vector< std::vector< cell > > MESH( MESH_height, std::vector<cell>(MESH_width) );;
 static auto TEMP = MESH; 
 
@@ -41,7 +47,7 @@ int main()
         for( size_t c = 0; c < MESH_width; ++c )
         {
             //add a circle of solid mesh zones 
-            if( ( (r-(float)MESH_height/2)*(r-(float)MESH_height/2) + (c-(float)MESH_width/4)*(c-(float)MESH_width/4) ) <= ( MESH_height*MESH_height / 85 ) )
+            if( false && ( (r-(float)MESH_height/2)*(r-(float)MESH_height/2) + (c-(float)MESH_width/4)*(c-(float)MESH_width/4) ) <= ( MESH_height*MESH_height / 85 ) )
             {
                 MESH[r][c].u = 0;
                 MESH[r][c].v = 0;
@@ -72,15 +78,17 @@ int main()
 
     size_t t = 0;
 
-    while( t <= 10000 )
+    while( t <= TIMESTEPS )
     {
-        //ExternalForce();
+        ExternalForce();
+
+        Divergence( 150, 1.9 );
 
         Advection();
 
-        Divergence( 60, 1.9 );
+  
 
-        if( t % 100 == 0 )
+        if( t % REPORT_INTERVAL == 0 )
         {
             std::string name = "frame_" + to_string(t) +".bmp";
 
@@ -95,12 +103,11 @@ int main()
 
 void ExternalForce()
 {
-
-    for( auto &row : MESH )
+    for( size_t r = 1; r < MESH_height; ++r )
     {
-        for( auto &CELL : row )
+        for( size_t c = 1; c < MESH_width; ++c )
         {
-            CELL.v -= 9.8 * dt * ( CELL.Fluid );
+            MESH[r][c].v -= 9.8 * dt * ( MESH[r][c].Fluid * MESH[r-1][c].Fluid );
         }
     }
 

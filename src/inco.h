@@ -1,5 +1,5 @@
-#ifndef INCOMPRESSIBLE_INVISCID
-#define INCOMPRESSIBLE_INVISCID
+#ifndef INCO_H
+#define INCO_H
 
 #include <stdint.h>
 #include <cmath>
@@ -14,24 +14,20 @@ struct cell
 {  
     double u = 0; // x velocity in m/s
     double v = 0; // y velocity in m/s
-    double density = 0;
-    double divergence = 0;
-    double p = 0;
-    bool Fluid = 1;
+    double density = 0; // SMOKE DENSITY NOT PHYSICAL DENSITY
+    double divergence = 0; 
+    double p = 0; // estimated kinetic pressure for visulaization
+    bool Fluid = 1; // pretty self explanatory
 };
 
-int main(); // function declerations should be put before static variables
+int main();
 void ExternalForce();
 void Divergence( size_t iterations, double Relaxation );
 void Advection();
 cell MAX_CELL();
 cell MIN_CELL();
-
 cell GetWeightedCellAverage( size_t r, size_t c, double x, double y );
 void Bitmap( std::vector< std::vector< cell > > &Img_Data, std::string &filename );
-
-
-
 
 
 struct BmpHeader//14 bytes

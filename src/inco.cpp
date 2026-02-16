@@ -2,8 +2,8 @@
 
 // SIMULATION CONTROLS
 static const size_t TIMESTEPS = 10000;
-static const size_t REPORT_INTERVAL = 100;
-static const size_t ITERATIONS = 100;
+static const size_t REPORT_INTERVAL = 500;
+static const size_t ITERATIONS = 30;
 static const double OVER_RELAXATION = 1.9;
 static const bool PRINT_P = 0;
 static const bool PRINT_V = 0;
@@ -15,13 +15,16 @@ static const bool PRINT_VEL = 0;
 // MESH DEFINITIONS
 static const size_t MESH_width = 1000;
 static const size_t MESH_height = 400;
-static const double CELL_SIZE = 0.01; // size of each cell in m
+static const double CELL_SIZE = 0.005; // size of each cell in m
 
 // PHYSICAL CONSTANTS
-static const double FLOW_VEL = 15;
-static const double density = 1.225; // density in kg / m^3
+static const double FLOW_VEL = 1;
+static const double density =  1.225; // density in kg / m^3
 static const double GRAVITY = -9.81; // ewww
-static const double dt = CELL_SIZE/FLOW_VEL * 0.7 ; // time step in sec should be < CELL_SIZE / Flow Velocity
+
+// time step in sec 
+// tries to keep velocities from moving more than one cell length per timestep
+static const double dt = CELL_SIZE/FLOW_VEL * 1; 
 
 // MESH and temporary contanor for advection step
 static std::vector< std::vector< cell > > MESH( MESH_height, std::vector<cell>(MESH_width) );;
@@ -32,9 +35,20 @@ using namespace std;
 int main()
 {
     cout << "Starting " << to_string( MESH_width ) << " x " << to_string( MESH_height ) << " Simulation with:\n" 
-         << "Timestep: " << to_string( dt ) << "\n"
-         << "Cell Size: " << to_string( CELL_SIZE ) << "\n"
+         << "Timestep:   " << to_string( dt ) << "\n"
+         << "Iterations: " <<to_string( ITERATIONS ) << "\n"
+         << "Cell Size:  " << to_string( CELL_SIZE ) << "\n"
          << "For: " << to_string( TIMESTEPS ) << " setps, and reporting every: " << to_string( REPORT_INTERVAL ) << " steps" << endl;
+
+
+    // super dumb way of making a skewed ellipse 
+    //for help defining varibles: https://www.desmos.com/calculator/fgdc56e9nm
+        float X, Y, R, SLOPE, HORZ_SHIFT, VERT_SHIFT, VERT_SQUISH;
+        SLOPE = 0.4;
+        VERT_SHIFT = MESH_height/2;
+        HORZ_SHIFT = MESH_width/5;
+        VERT_SQUISH = 45;
+        R = (float)MESH_height*MESH_height / 64;
 
     for( size_t r = 0; r < MESH_height; ++r )
     {
@@ -51,11 +65,16 @@ int main()
         MESH[r][MESH_width-1].Fluid = 0;
         MESH[r][MESH_width-1].u = FLOW_VEL;
     
+
         
         for( size_t c = 0; c < MESH_width; ++c )
         {
-            //add a circle of solid mesh zones 
-            if( ( (r-(float)MESH_height/2)*(r-(float)MESH_height/2) + (c-(float)MESH_width/4)*(c-(float)MESH_width/4) ) <= ( MESH_height*MESH_height / 85 ) )
+
+            Y = r + SLOPE*( c - HORZ_SHIFT ) - VERT_SHIFT;
+
+            X = c + SLOPE*( c - HORZ_SHIFT ) - HORZ_SHIFT;
+
+            if( ( (Y)*(Y)*VERT_SQUISH + (X)*(X) ) <= (R) )
             {
                 MESH[r][c].u = 0;
                 MESH[r][c].v = 0;
@@ -65,9 +84,9 @@ int main()
             
 
             MESH[0][c].Fluid = 0; // bottom treatment
-            //MESH[0][c].u = FLOW_VEL; 
+            MESH[0][c].u = FLOW_VEL; 
             MESH[MESH_height-1][c].Fluid = 0; // top treatment
-            //MESH[MESH_height-1][c].u = FLOW_VEL; 
+            MESH[MESH_height-1][c].u = FLOW_VEL; 
         }
 
     }

@@ -3,6 +3,8 @@
 // SIMULATION CONTROLS
 static const size_t TIMESTEPS = 10000;
 static const size_t REPORT_INTERVAL = 100;
+static const size_t ITERATIONS = 100;
+static const double OVER_RELAXATION = 1.9;
 static const bool PRINT_P = 0;
 static const bool PRINT_V = 0;
 static const bool PRINT_U = 0;
@@ -13,12 +15,13 @@ static const bool PRINT_VEL = 0;
 // MESH DEFINITIONS
 static const size_t MESH_width = 1000;
 static const size_t MESH_height = 400;
-static const double CELL_SIZE = 0.005; // size of each cell in m
+static const double CELL_SIZE = 0.01; // size of each cell in m
 
 // PHYSICAL CONSTANTS
-static const double FLOW_VEL = 1;
+static const double FLOW_VEL = 15;
 static const double density = 1.225; // density in kg / m^3
-static const double dt = 0.05/3 * 0.2 ; // time step in sec should be < CELL_SIZE / Flow Velocity
+static const double GRAVITY = -9.81; // ewww
+static const double dt = CELL_SIZE/FLOW_VEL * 0.7 ; // time step in sec should be < CELL_SIZE / Flow Velocity
 
 // MESH and temporary contanor for advection step
 static std::vector< std::vector< cell > > MESH( MESH_height, std::vector<cell>(MESH_width) );;
@@ -69,29 +72,29 @@ int main()
 
     }
     
+    // initial solution "best" guess
     for( size_t r = 1; r < MESH_height - 1; ++r )
     {
         for( size_t c = 1; c < MESH_width - 1; ++c )
         {
-            // FIX THIS SO THAT BOUNDARY EDGES DONT GET ASSIGNED VELOCITIES THAT NEVER CHANGE
+            // MAKE SURE THAT SOLID EDGES DONT GET ASSIGNED VELOCITIES THAT NEVER CHANGE
             if( MESH[r][c-1].Fluid && MESH[r][c].Fluid )
                 MESH[r][c].u = FLOW_VEL;
         }
     }
     
-    Divergence( 1000, 1.9 );
+    // start with a converged solution
+    Divergence( 1000, OVER_RELAXATION );
 
     size_t t = 0;
 
     while( t <= TIMESTEPS )
     {
-        ExternalForce();
+        //ExternalForce();  // fuck gravity
 
-        Divergence( 150, 1.9 );
+        Divergence( ITERATIONS, OVER_RELAXATION );
 
         Advection();
-
-  
 
         if( t % REPORT_INTERVAL == 0 )
         {
@@ -112,7 +115,7 @@ void ExternalForce()
     {
         for( size_t c = 1; c < MESH_width; ++c )
         {
-            MESH[r][c].v -= 9.8 * dt * ( MESH[r][c].Fluid * MESH[r-1][c].Fluid );
+            MESH[r][c].v += 9.8 * GRAVITY * ( MESH[r][c].Fluid * MESH[r-1][c].Fluid );
         }
     }
 
@@ -120,40 +123,49 @@ void ExternalForce()
 
 void Divergence( size_t iterations, double Relaxation )
 {
-    uint8_t neighbors = 0;
-    double Div = 0;
+
 
     for( size_t i = 0; i <= iterations; ++i )
     {
+
         for( size_t row = 1; row < MESH_height - 1; ++row )
         {
-            for( size_t col = 1; col < MESH_width - 1; ++col  )
+            
+            for( size_t col = 1; col < MESH_width - 1; ++col )
             {
-                //skip over non-fluid cells
-                if( !MESH[row][col].Fluid ){ continue; }
-
-                neighbors = MESH[row-1][col].Fluid + MESH[row+1][col].Fluid + MESH[row][col+1].Fluid + MESH[row][col-1].Fluid;
-                Div = (-MESH[row][col].u - MESH[row][col].v + MESH[row+1][col].v + MESH[row][col+1].u);
-                
-                //store the divergence values for visualization
-                MESH[row][col].divergence = Div;
-
-                Div *= Relaxation;
-
-                //make the divergence of this cell 0 while leaving out boundary edges
-                MESH[row][col].u += Div * MESH[row][col-1].Fluid / neighbors;
-                MESH[row][col].v += Div * MESH[row-1][col].Fluid / neighbors;
-                MESH[row+1][col].v -= Div * MESH[row+1][col].Fluid / neighbors;
-                MESH[row][col+1].u -= Div * MESH[row][col+1].Fluid / neighbors;
-
-                // estimate kinetic pressure
-                MESH[row][col].p -= Div / neighbors *  density * CELL_SIZE / dt;
-                
+                CellDivergence( row, col, Relaxation );
             }
         }
 
     }
 
+}
+
+void CellDivergence( const size_t &row, const size_t &col, const double &Relaxation )
+{
+    uint8_t neighbors = 0;
+    double Div = 0;
+    if (!MESH[row][col].Fluid)
+    {
+        return;
+    }
+
+    neighbors = MESH[row - 1][col].Fluid + MESH[row + 1][col].Fluid + MESH[row][col + 1].Fluid + MESH[row][col - 1].Fluid;
+    Div = (-MESH[row][col].u - MESH[row][col].v + MESH[row + 1][col].v + MESH[row][col + 1].u);
+
+    // store the divergence values for visualization
+    MESH[row][col].divergence = Div;
+
+    Div *= Relaxation;
+
+    // make the divergence of this cell 0 while leaving out boundary edges
+    MESH[row][col].u += Div * MESH[row][col - 1].Fluid / neighbors;
+    MESH[row][col].v += Div * MESH[row - 1][col].Fluid / neighbors;
+    MESH[row + 1][col].v -= Div * MESH[row + 1][col].Fluid / neighbors;
+    MESH[row][col + 1].u -= Div * MESH[row][col + 1].Fluid / neighbors;
+
+    // estimate kinetic pressure
+    MESH[row][col].p -= Div / neighbors * density * CELL_SIZE / dt;
 }
 
 void Advection()
@@ -327,7 +339,7 @@ void Bitmap( vector< std::vector< cell > > & Img_Data, std::string &filename )
             file.write( (char *)0, 1 ); // definitly works??!!!
     }
 
-    cout << "MAXIMUM divergence is: " << to_string( MAX.divergence ) << endl;
+    cout << "Saving: " << filename <<";  divergence: " << to_string( MAX.divergence ) << endl;
     
     file.close();    
 }

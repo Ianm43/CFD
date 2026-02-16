@@ -23,6 +23,7 @@ struct cell
 int main();
 void ExternalForce();
 void Divergence( size_t iterations, double Relaxation );
+void CellDivergence( const size_t &row, const size_t &col, const double &Relaxation );
 void Advection();
 cell MAX_CELL();
 cell MIN_CELL();

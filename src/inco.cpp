@@ -1,30 +1,31 @@
 #include "inco.h"
 
 // SIMULATION CONTROLS
-static const size_t TIMESTEPS = 10000;
-static const size_t REPORT_INTERVAL = 500;
+static const size_t TIMESTEPS = 10;
+static const size_t REPORT_INTERVAL = 1;
 static const size_t ITERATIONS = 30;
 static const double OVER_RELAXATION = 1.9;
-static const bool PRINT_P = 0;
+static const bool PRINT_P = 1;
 static const bool PRINT_V = 0;
 static const bool PRINT_U = 0;
-static const bool PRINT_DEN = 1;
+static const bool PRINT_DEN = 0;
 static const bool PRINT_DIV = 0;
 static const bool PRINT_VEL = 0;
+static const bool DRAW_ELLIPSE = 1;
 
 // MESH DEFINITIONS
-static const size_t MESH_width = 1000;
-static const size_t MESH_height = 400;
+static const size_t MESH_width = 2000;
+static const size_t MESH_height = 800;
 static const double CELL_SIZE = 0.005; // size of each cell in m
 
 // PHYSICAL CONSTANTS
-static const double FLOW_VEL = 1;
+static const double FLOW_VEL = 3;
 static const double density =  1.225; // density in kg / m^3
 static const double GRAVITY = -9.81; // ewww
 
 // time step in sec 
 // tries to keep velocities from moving more than one cell length per timestep
-static const double dt = CELL_SIZE/FLOW_VEL * 1; 
+static const double dt = CELL_SIZE/FLOW_VEL * 0.1; 
 
 // MESH and temporary contanor for advection step
 static std::vector< std::vector< cell > > MESH( MESH_height, std::vector<cell>(MESH_width) );;
@@ -38,17 +39,17 @@ int main()
          << "Timestep:   " << to_string( dt ) << "\n"
          << "Iterations: " <<to_string( ITERATIONS ) << "\n"
          << "Cell Size:  " << to_string( CELL_SIZE ) << "\n"
-         << "For: " << to_string( TIMESTEPS ) << " setps, and reporting every: " << to_string( REPORT_INTERVAL ) << " steps" << endl;
+         << "For: " << to_string( TIMESTEPS ) << " steps, and reporting every: " << to_string( REPORT_INTERVAL ) << " steps" << endl;
 
 
     // super dumb way of making a skewed ellipse 
     //for help defining varibles: https://www.desmos.com/calculator/fgdc56e9nm
         float X, Y, R, SLOPE, HORZ_SHIFT, VERT_SHIFT, VERT_SQUISH;
-        SLOPE = 0.4;
+        SLOPE = 0.15;
         VERT_SHIFT = MESH_height/2;
         HORZ_SHIFT = MESH_width/5;
-        VERT_SQUISH = 45;
-        R = (float)MESH_height*MESH_height / 64;
+        VERT_SQUISH = 100;
+        R = (float)MESH_height*MESH_height / 25; //semi major axis
 
     for( size_t r = 0; r < MESH_height; ++r )
     {
@@ -69,12 +70,13 @@ int main()
         
         for( size_t c = 0; c < MESH_width; ++c )
         {
-
+            MESH[r][c].x = c * CELL_SIZE;
+            MESH[r][c].y = r * CELL_SIZE;
             Y = r + SLOPE*( c - HORZ_SHIFT ) - VERT_SHIFT;
 
             X = c + SLOPE*( c - HORZ_SHIFT ) - HORZ_SHIFT;
 
-            if( ( (Y)*(Y)*VERT_SQUISH + (X)*(X) ) <= (R) )
+            if( DRAW_ELLIPSE && round( (Y)*(Y)*VERT_SQUISH + (X)*(X) ) <= (R) )
             {
                 MESH[r][c].u = 0;
                 MESH[r][c].v = 0;
@@ -109,7 +111,7 @@ int main()
 
     while( t <= TIMESTEPS )
     {
-        //ExternalForce();  // fuck gravity
+        ExternalForce();  // fuck gravity
 
         Divergence( ITERATIONS, OVER_RELAXATION );
 
@@ -195,54 +197,55 @@ void Advection()
     double X_vert, Y_vert, X_horz, Y_horz;
     size_t r_vert, c_vert, r_horz, c_horz, r_den, c_den;
 
-    for( size_t r = 1; r < MESH_height - 1; ++r )
+    for( size_t r = 0; r < MESH_height; ++r )
     {
-        for( size_t c = 1; c < MESH_width - 1; ++c )
+        for( size_t c = 0; c < MESH_width; ++c )
         {
             //skip non fluid cells
             if( !MESH[r][c].Fluid ){ continue; }
 
             //get average velocities around each edge and look back
 
-                X_vert = (double)c*CELL_SIZE - ( (MESH[r][c].u + MESH[r-1][c].u + MESH[r][c+1].u + MESH[r-1][c+1].u) / 4.0 ) * dt;
+                X_vert = MESH[r][c].x - ( (MESH[r][c].u + MESH[r-1][c].u + MESH[r][c+1].u + MESH[r-1][c+1].u) / 4.0 ) * dt;
                 X_vert *= !( X_vert < 0 );
-                Y_vert = (double)r*CELL_SIZE - MESH[r][c].v * dt;
+                Y_vert = MESH[r][c].y - MESH[r][c].v * dt;
                 Y_vert *= !( Y_vert < 0 );
 
-                X_horz = (double)c*CELL_SIZE - MESH[r][c].u * dt;
+                X_horz = MESH[r][c].x - MESH[r][c].u * dt;
                 X_horz *= !( X_horz < 0 );
-                Y_horz = (double)r*CELL_SIZE - ( (MESH[r][c].v + MESH[r][c-1].v + MESH[r+1][c].v + MESH[r+1][c-1].v) / 4.0 ) * dt;
+                Y_horz = MESH[r][c].y - ( (MESH[r][c].v + MESH[r][c-1].v + MESH[r+1][c].v + MESH[r+1][c-1].v) / 4.0 ) * dt;
                 Y_horz *= !( Y_horz < 0 );
 
             // predict last location of "particle"
 
                 c_vert = ( X_vert / CELL_SIZE );
-                //c_vert *= !( c_vert < 0 ); 
                 if( c_vert > (long long)MESH_width - 2 ){ c_vert = MESH_width - 2; }
-                assert( c_vert <= (long long)MESH_width - 2 && c_vert >= 0);
 
                 r_vert =  ( Y_vert / CELL_SIZE );
-                //r_vert *= !( r_vert < 0 );
                 if( r_vert > (long long)MESH_height - 2 ){ r_vert = MESH_height - 2; }
 
                 c_horz =  ( X_horz / CELL_SIZE );
-                //c_horz *= !( c_horz < 0 );
                 if( c_horz > (long long)MESH_width - 2 ){ c_horz = MESH_width - 2; }
 
                 r_horz = ( Y_horz / CELL_SIZE );
-                //r_horz *= !( r_horz < 0 );
                 if( r_horz > (long long)MESH_height - 2 ){ r_horz = MESH_height - 2; }
 
                 c_den = ( X_horz / CELL_SIZE );
-                //c_den *= !( c_den < 0 );
                 if( c_den > (long long)MESH_width - 2 ){ c_den = MESH_width - 2; }
 
                 r_den = ( Y_vert / CELL_SIZE );
-                //r_den *= !( r_den < 0 );
                 if( r_den > (long long)MESH_height - 2 ){ r_den = MESH_height - 2; }
 
+            if( c_vert < 0 || c_vert > MESH_width - 2 )
+            {
+                cout << "c_vert is out of range: " << to_string(c_vert) << endl;
+                cout << "X_vert: " << to_string(X_vert);
+            }
+            
+            assert( c_vert <= MESH_width - 2 && c_vert >= 0);
+
             // get average velocities around position
-            /*
+            /* 
                 if (X_horz - (double)c_horz * CELL_SIZE < 0)
                 {
                     cout << to_string(X_horz - (double)c_horz * CELL_SIZE) << endl;
@@ -254,11 +257,11 @@ void Advection()
             assert( ( X_horz - (double)c_horz * CELL_SIZE ) / CELL_SIZE >= 0 && ( X_horz - (double)c_horz * CELL_SIZE ) / CELL_SIZE <= 1 );
             */
 
-            TEMP[r][c].u = GetWeightedCellAverage( (size_t)r_horz, (size_t)c_horz, ( X_horz - (double)c_horz * CELL_SIZE ) / CELL_SIZE, ( Y_horz - (double)r_horz*CELL_SIZE ) / CELL_SIZE ).u;
+            TEMP[r][c].u = GetWeightedCellAverage( (size_t)r_horz, (size_t)c_horz, ( X_horz - MESH[r_horz][c_horz].x ) / CELL_SIZE, ( Y_horz - MESH[r_horz][c_horz].y ) / CELL_SIZE ).u;
 
-            TEMP[r][c].v = GetWeightedCellAverage( (size_t)r_vert, (size_t)c_vert, ( X_vert - (double)c_vert * CELL_SIZE ) / CELL_SIZE, ( Y_vert - (double)r_vert*CELL_SIZE ) / CELL_SIZE ).v;
+            TEMP[r][c].v = GetWeightedCellAverage( (size_t)r_vert, (size_t)c_vert, ( X_vert - MESH[r_vert][c_vert].x ) / CELL_SIZE, ( Y_vert - MESH[r_vert][c_vert].y ) / CELL_SIZE ).v;
 
-            TEMP[r][c].density = GetWeightedCellAverage( (size_t)r_den, (size_t)c_den, ( X_horz - (double)c_den * CELL_SIZE ) / CELL_SIZE, ( Y_vert - (double)r_den*CELL_SIZE ) / CELL_SIZE).density;
+            TEMP[r][c].density = GetWeightedCellAverage( (size_t)r_den, (size_t)c_den, ( X_horz - MESH[r_den][c_den].x ) / CELL_SIZE, ( Y_vert - MESH[r_den][c_den].y ) / CELL_SIZE).density;
 
         }
     }
@@ -284,6 +287,25 @@ cell GetWeightedCellAverage( size_t r, size_t c, double x, double y )// x and y 
 
 void Bitmap( vector< std::vector< cell > > & Img_Data, std::string &filename )
 {
+    cell MAX = MAX_CELL();
+    cell MIN = MIN_CELL();
+    
+    //assert( MAX.p != MIN.p );
+    
+    MAX.u -= MIN.u * (MIN.u < 0);
+    MAX.v -= MIN.v * (MIN.v < 0);
+    MAX.p -= MIN.p * (MIN.p < 0);
+    MAX.density -= MIN.density * (MIN.density < 0) ;
+    MAX.divergence -= MIN.divergence * (MIN.divergence < 0);
+    
+    assert( MAX.divergence < 1 && "Divergence should not be this high" );
+
+    double BIGGEST_VEL = sqrt(MAX.u*MAX.u + MAX.v*MAX.v);
+    double BIGGEST = ( MAX.p * PRINT_P + MAX.u * PRINT_U + MAX.v * PRINT_V + MAX.divergence * PRINT_DIV + BIGGEST_VEL * PRINT_VEL + PRINT_DEN );
+    double VEL = 0;
+
+    double PRINT_VAL;
+
     BmpHeader header;
     IBmpInfoHeader infoHeader;
 
@@ -302,25 +324,6 @@ void Bitmap( vector< std::vector< cell > > & Img_Data, std::string &filename )
     infoHeader.InfoHeaderWrite( file );
 
     Pixel pixel;
-
-    cell MAX = MAX_CELL();
-    cell MIN = MIN_CELL();
-    
-    //assert( MAX.p != MIN.p );
-    
-    MAX.u -= MIN.u * (MIN.u < 0);
-    MAX.v -= MIN.v * (MIN.v < 0);
-    MAX.p -= MIN.p * (MIN.p < 0);
-    MAX.density -= MIN.density * (MIN.density < 0) ;
-    MAX.divergence -= MIN.divergence * (MIN.divergence < 0);
-    
-    assert( MAX.divergence < 100 && "Divergence should not be this high" );
-
-    double BIGGEST_VEL = sqrt(MAX.u*MAX.u + MAX.v*MAX.v);
-    double BIGGEST = ( MAX.p * PRINT_P + MAX.u * PRINT_U + MAX.v * PRINT_V + MAX.divergence * PRINT_DIV + BIGGEST_VEL * PRINT_VEL + PRINT_DEN );
-    double VEL = 0;
-
-    double PRINT_VAL;
     
     for( auto const &ROW : Img_Data )
     {

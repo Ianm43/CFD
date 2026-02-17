@@ -12,6 +12,8 @@
 
 struct cell
 {  
+    double x; // x coordinate of the bottom left vertex 
+    double y;
     double u = 0; // x velocity in m/s
     double v = 0; // y velocity in m/s
     double density = 0; // SMOKE DENSITY NOT PHYSICAL DENSITY

@@ -193,7 +193,7 @@ void Advection()
     TEMP = MESH;
 
     double X_vert, Y_vert, X_horz, Y_horz;
-    long long r_vert, c_vert, r_horz, c_horz, r_den, c_den;
+    size_t r_vert, c_vert, r_horz, c_horz, r_den, c_den;
 
     for( size_t r = 1; r < MESH_height - 1; ++r )
     {

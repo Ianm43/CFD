@@ -314,6 +314,7 @@ void Bitmap( vector< std::vector< cell > > & Img_Data, std::string &filename )
     MAX.density -= MIN.density * (MIN.density < 0) ;
     MAX.divergence -= MIN.divergence * (MIN.divergence < 0);
     
+    assert( MAX.divergence < 100 && "Divergence should not be this high" );
 
     double BIGGEST_VEL = sqrt(MAX.u*MAX.u + MAX.v*MAX.v);
     double BIGGEST = ( MAX.p * PRINT_P + MAX.u * PRINT_U + MAX.v * PRINT_V + MAX.divergence * PRINT_DIV + BIGGEST_VEL * PRINT_VEL + PRINT_DEN );

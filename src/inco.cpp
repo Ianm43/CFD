@@ -134,7 +134,7 @@ void ExternalForce()
     {
         for( size_t c = 1; c < MESH_width; ++c )
         {
-            MESH[r][c].v += 9.8 * GRAVITY * ( MESH[r][c].Fluid * MESH[r-1][c].Fluid );
+            MESH[r][c].v += dt * GRAVITY * ( MESH[r][c].Fluid * MESH[r-1][c].Fluid );
         }
     }
 

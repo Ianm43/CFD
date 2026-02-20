@@ -1,5 +1,5 @@
 # gitignore pattern to igonre solution data and vdcode bs
 
-
+*.exe
 *.bmp
 .vscode/*.json

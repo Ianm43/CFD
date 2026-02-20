@@ -136,6 +136,7 @@ void ExternalForce()
     {
         for( size_t c = 1; c < MESH_width; ++c )
         {
+            //update velocites unless those velocies belong to a non fluid cell 
             MESH[r][c].v += dt * GRAVITY * ( MESH[r][c].Fluid * MESH[r-1][c].Fluid );
         }
     }
@@ -144,32 +145,51 @@ void ExternalForce()
 
 void Divergence( size_t iterations, double Relaxation )
 {
-
-
-    for( size_t i = 0; i <= iterations; ++i )
+    //Profile P;
+    #pragma omp parallel
     {
-
-        for( size_t row = 1; row < MESH_height - 1; ++row )
+        for( size_t i = 0; i <= iterations; ++i )
         {
             
+            /* for( size_t row = 1; row < MESH_height - 1; ++row )
+            {
             for( size_t col = 1; col < MESH_width - 1; ++col )
             {
+
                 CellDivergence( row, col, Relaxation );
+                    
             }
+            } */
+
+            #pragma omp for
+           for( size_t index = 0; index < MESH_height*MESH_width; index+=2 )
+           {
+
+                CellDivergence( index/MESH_width, index%MESH_width, Relaxation );
+
+           }
+            #pragma omp barrier
+
+            #pragma omp for
+            for( size_t index = 1; index < MESH_height*MESH_width; index+=2 )
+            {
+
+                CellDivergence( index/MESH_width, index%MESH_width, Relaxation );
+
+            }
+
+            #pragma omp barrier
         }
-
     }
-
 }
 
 void CellDivergence( const size_t &row, const size_t &col, const double &Relaxation )
 {
+    //skip non fluid cells
+    if (!MESH[row][col].Fluid){ return; }
+
     uint8_t neighbors = 0;
     double Div = 0;
-    if (!MESH[row][col].Fluid)
-    {
-        return;
-    }
 
     neighbors = MESH[row - 1][col].Fluid + MESH[row + 1][col].Fluid + MESH[row][col + 1].Fluid + MESH[row][col - 1].Fluid;
     Div = (-MESH[row][col].u - MESH[row][col].v + MESH[row + 1][col].v + MESH[row][col + 1].u);
@@ -191,7 +211,7 @@ void CellDivergence( const size_t &row, const size_t &col, const double &Relaxat
 
 void Advection()
 {
-    // Update the edge velocities for each cell
+    
     TEMP = MESH;
 
     double X_vert, Y_vert, X_horz, Y_horz;
@@ -207,34 +227,35 @@ void Advection()
             //get average velocities around each edge and look back
 
                 X_vert = MESH[r][c].x - ( (MESH[r][c].u + MESH[r-1][c].u + MESH[r][c+1].u + MESH[r-1][c+1].u) / 4.0 ) * dt;
-                X_vert *= !( X_vert < 0 );
+                X_vert *= ( X_vert > 0 );
                 Y_vert = MESH[r][c].y - MESH[r][c].v * dt;
-                Y_vert *= !( Y_vert < 0 );
+                Y_vert *= ( Y_vert > 0 );
 
                 X_horz = MESH[r][c].x - MESH[r][c].u * dt;
-                X_horz *= !( X_horz < 0 );
+                X_horz *= ( X_horz > 0 );
                 Y_horz = MESH[r][c].y - ( (MESH[r][c].v + MESH[r][c-1].v + MESH[r+1][c].v + MESH[r+1][c-1].v) / 4.0 ) * dt;
-                Y_horz *= !( Y_horz < 0 );
+                Y_horz *= ( Y_horz > 0 );
+
 
             // predict last location of "particle"
 
                 c_vert = ( X_vert / CELL_SIZE );
-                if( c_vert > (long long)MESH_width - 2 ){ c_vert = MESH_width - 2; }
+                if( c_vert > MESH_width - 2 ){ c_vert = MESH_width - 2; }
 
                 r_vert =  ( Y_vert / CELL_SIZE );
-                if( r_vert > (long long)MESH_height - 2 ){ r_vert = MESH_height - 2; }
+                if( r_vert > MESH_height - 2 ){ r_vert = MESH_height - 2; }
 
                 c_horz =  ( X_horz / CELL_SIZE );
-                if( c_horz > (long long)MESH_width - 2 ){ c_horz = MESH_width - 2; }
+                if( c_horz > MESH_width - 2 ){ c_horz = MESH_width - 2; }
 
                 r_horz = ( Y_horz / CELL_SIZE );
-                if( r_horz > (long long)MESH_height - 2 ){ r_horz = MESH_height - 2; }
+                if( r_horz > MESH_height - 2 ){ r_horz = MESH_height - 2; }
 
                 c_den = ( X_horz / CELL_SIZE );
-                if( c_den > (long long)MESH_width - 2 ){ c_den = MESH_width - 2; }
+                if( c_den > MESH_width - 2 ){ c_den = MESH_width - 2; }
 
                 r_den = ( Y_vert / CELL_SIZE );
-                if( r_den > (long long)MESH_height - 2 ){ r_den = MESH_height - 2; }
+                if( r_den > MESH_height - 2 ){ r_den = MESH_height - 2; }
 
             if( c_vert < 0 || c_vert > MESH_width - 2 )
             {
@@ -257,11 +278,12 @@ void Advection()
             assert( ( X_horz - (double)c_horz * CELL_SIZE ) / CELL_SIZE >= 0 && ( X_horz - (double)c_horz * CELL_SIZE ) / CELL_SIZE <= 1 );
             */
 
-            TEMP[r][c].u = GetWeightedCellAverage( (size_t)r_horz, (size_t)c_horz, ( X_horz - MESH[r_horz][c_horz].x ) / CELL_SIZE, ( Y_horz - MESH[r_horz][c_horz].y ) / CELL_SIZE ).u;
+            TEMP[r][c].u = GetWeightedCellAverage( r_horz, c_horz, ( X_horz - MESH[r_horz][c_horz].x ) / CELL_SIZE, ( Y_horz - MESH[r_horz][c_horz].y ) / CELL_SIZE ).u;
 
-            TEMP[r][c].v = GetWeightedCellAverage( (size_t)r_vert, (size_t)c_vert, ( X_vert - MESH[r_vert][c_vert].x ) / CELL_SIZE, ( Y_vert - MESH[r_vert][c_vert].y ) / CELL_SIZE ).v;
+            TEMP[r][c].v = GetWeightedCellAverage( r_vert, c_vert, ( X_vert - MESH[r_vert][c_vert].x ) / CELL_SIZE, ( Y_vert - MESH[r_vert][c_vert].y ) / CELL_SIZE ).v;
 
-            TEMP[r][c].density = GetWeightedCellAverage( (size_t)r_den, (size_t)c_den, ( X_horz - MESH[r_den][c_den].x ) / CELL_SIZE, ( Y_vert - MESH[r_den][c_den].y ) / CELL_SIZE).density;
+
+            TEMP[r][c].density = GetWeightedCellAverage( r_den, c_den, ( X_horz - MESH[r_den][c_den].x ) / CELL_SIZE, ( Y_vert - MESH[r_den][c_den].y ) / CELL_SIZE).density;
 
         }
     }
@@ -361,6 +383,7 @@ void Bitmap( vector< std::vector< cell > > & Img_Data, std::string &filename )
         for( uint8_t pad = 0; pad < abs(infoHeader.Height) % 4; ++pad )
             file.write( (char *)0, 1 ); // definitly works??!!!
     }
+
 
     cout << "Saving: " << filename <<";  divergence: " << to_string( MAX.divergence ) << endl;
     

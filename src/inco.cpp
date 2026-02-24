@@ -1,135 +1,179 @@
 #include "inco.h"
 
-// SIMULATION CONTROLS
-static const size_t TIMESTEPS = 10;
-static const size_t REPORT_INTERVAL = 1;
-static const size_t ITERATIONS = 30;
-static const double OVER_RELAXATION = 1.9;
-static const bool PRINT_P = 1;
-static const bool PRINT_V = 0;
-static const bool PRINT_U = 0;
-static const bool PRINT_DEN = 0;
-static const bool PRINT_DIV = 0;
-static const bool PRINT_VEL = 0;
-static const bool DRAW_ELLIPSE = 1;
-
-// MESH DEFINITIONS
-static const size_t MESH_width = 2000;
-static const size_t MESH_height = 800;
-static const double CELL_SIZE = 0.005; // size of each cell in m
-
-// PHYSICAL CONSTANTS
-static const double FLOW_VEL = 3;
-static const double density =  1.225; // density in kg / m^3
-static const double GRAVITY = -9.81; // ewww
-
-// time step in sec 
-// tries to keep velocities from moving more than one cell length per timestep
-static const double dt = CELL_SIZE/FLOW_VEL * 0.1; 
-
-// MESH and temporary contanor for advection step
-static std::vector< std::vector< cell > > MESH( MESH_height, std::vector<cell>(MESH_width) );;
-static auto TEMP = MESH; 
-
 using namespace std;
 
 int main()
 {
-    cout << "Starting " << to_string( MESH_width ) << " x " << to_string( MESH_height ) << " Simulation with:\n" 
-         << "Timestep:   " << to_string( dt ) << "\n"
-         << "Iterations: " <<to_string( ITERATIONS ) << "\n"
-         << "Cell Size:  " << to_string( CELL_SIZE ) << "\n"
-         << "For: " << to_string( TIMESTEPS ) << " steps, and reporting every: " << to_string( REPORT_INTERVAL ) << " steps" << endl;
+    INCO_opts solver_opts;
+    Graphics_opts graph_opts;
+
+    bool DRAW_ELLIPSE = 1;
+    bool INITIAL = true;
+
+    double FLOW_VEL_u = 1;
+    double FLOW_VEL_v = 0;
+
+    solver_opts.MESH_HEIGHT = 200;
+    solver_opts.MESH_WIDTH = 200;
+    solver_opts.CELL_SIZE = 0.005;
+
+    solver_opts.ITERATIONS = 40;
+    solver_opts.REPORT_INTERVAL = 1;
+    solver_opts.TIMESTEPS = 5; 
+    solver_opts.OVER_RELAXATION = 1.9;
+
+    solver_opts.TIMESTEP = solver_opts.CELL_SIZE/sqrt(FLOW_VEL_u*FLOW_VEL_u+FLOW_VEL_v*FLOW_VEL_v)*0.25;
+
+    Profile P;
+    
+    Force Lift_Report( 0, 1, "Wing", "Lift", 1, 0 );
+
+    std::vector< std::vector< cell > > MESH( solver_opts.MESH_HEIGHT, std::vector<cell>(solver_opts.MESH_WIDTH) );;
+
+    cout << "Starting " << to_string( solver_opts.MESH_WIDTH ) << " x " << to_string( solver_opts.MESH_HEIGHT ) << " Simulation with:\n" 
+         << "Timestep:   " << to_string( solver_opts.TIMESTEP ) << "\n"
+         << "Iterations: " <<to_string( solver_opts.ITERATIONS ) << "\n"
+         << "Cell Size:  " << to_string( solver_opts.CELL_SIZE ) << "\n"
+         << "For: " << to_string( solver_opts.TIMESTEPS ) << " steps, and reporting every: " << to_string( solver_opts.REPORT_INTERVAL ) << " steps" << endl;
 
 
     // super dumb way of making a skewed ellipse 
     //for help defining varibles: https://www.desmos.com/calculator/fgdc56e9nm
         float X, Y, R, SLOPE, HORZ_SHIFT, VERT_SHIFT, VERT_SQUISH;
-        SLOPE = 0.15;
-        VERT_SHIFT = MESH_height/2;
-        HORZ_SHIFT = MESH_width/5;
-        VERT_SQUISH = 100;
-        R = (float)MESH_height*MESH_height / 25; //semi major axis
+        SLOPE = 0;
+        VERT_SHIFT = solver_opts.MESH_HEIGHT/2.0;
+        HORZ_SHIFT = solver_opts.MESH_WIDTH/2.0;
+        VERT_SQUISH = 1;
+        R = solver_opts.MESH_HEIGHT*solver_opts.MESH_HEIGHT / 100; //semi major axis
 
-    for( size_t r = 0; r < MESH_height; ++r )
+    for( size_t r = 0; r < solver_opts.MESH_HEIGHT; ++r )
     {
-        if( r > MESH_height/2 - 30 && r < MESH_height/2 + 30 )
-        {
-            MESH[r][0].density=0.5;
-        }
         //Left side treatment
         MESH[r][0].Fluid = 0;
-        MESH[r][1].u = FLOW_VEL;
-        MESH[r][0].u = FLOW_VEL;
+        MESH[r][1].u = FLOW_VEL_u;
+        MESH[r][0].u = FLOW_VEL_u;
+        MESH[r][0].v = FLOW_VEL_v;
+        MESH[r][1].v = FLOW_VEL_v;
 
         //right side treatment
-        MESH[r][MESH_width-1].Fluid = 0;
-        MESH[r][MESH_width-1].u = FLOW_VEL;
+        MESH[r][solver_opts.MESH_WIDTH-1].Fluid = 0;
+        MESH[r][solver_opts.MESH_WIDTH-1].u = FLOW_VEL_u;
+        MESH[r][solver_opts.MESH_WIDTH-1].v = FLOW_VEL_v;
     
 
         
-        for( size_t c = 0; c < MESH_width; ++c )
+        for( size_t c = 0; c < solver_opts.MESH_WIDTH; ++c )
         {
-            MESH[r][c].x = c * CELL_SIZE;
-            MESH[r][c].y = r * CELL_SIZE;
-            Y = r + SLOPE*( c - HORZ_SHIFT ) - VERT_SHIFT;
+
+            if( c <= 200   &&  r > solver_opts.MESH_HEIGHT/2 - 20 && r < solver_opts.MESH_HEIGHT/2 + 20 )
+            {
+                //MESH[r][c].density = 0.5;
+            }
+            MESH[r][c].x = c * solver_opts.CELL_SIZE;
+            MESH[r][c].y = r * solver_opts.CELL_SIZE;
+            Y = r + SLOPE*( c - HORZ_SHIFT ) - VERT_SHIFT ;
 
             X = c + SLOPE*( c - HORZ_SHIFT ) - HORZ_SHIFT;
 
-            if( DRAW_ELLIPSE && round( (Y)*(Y)*VERT_SQUISH + (X)*(X) ) <= (R) )
+            if( DRAW_ELLIPSE && ( (Y)*(Y)*VERT_SQUISH + (X)*(X) ) <= (R) )
             {
+                
                 MESH[r][c].u = 0;
                 MESH[r][c].v = 0;
                 MESH[r][c].Fluid = 0;
+                MESH[r][c].Tag = "Wing";
                 continue;
             }
             
 
             MESH[0][c].Fluid = 0; // bottom treatment
-            MESH[0][c].u = FLOW_VEL; 
-            MESH[MESH_height-1][c].Fluid = 0; // top treatment
-            MESH[MESH_height-1][c].u = FLOW_VEL; 
+            MESH[0][c].u = 0;//FLOW_VEL_u; 
+            MESH[0][c].v = 0;//FLOW_VEL_v;
+            MESH[solver_opts.MESH_HEIGHT-1][c].Fluid = 0; // top treatment
+            MESH[solver_opts.MESH_HEIGHT-1][c].u = 0;//FLOW_VEL_u; 
+            MESH[solver_opts.MESH_HEIGHT-1][c].v = 0; //FLOW_VEL_v;
         }
 
     }
     
     // initial solution "best" guess
-    for( size_t r = 1; r < MESH_height - 1; ++r )
+    for( size_t r = 1; r < solver_opts.MESH_HEIGHT - 1 && INITIAL; ++r )
     {
-        for( size_t c = 1; c < MESH_width - 1; ++c )
+        for( size_t c = 1; c < solver_opts.MESH_WIDTH - 1; ++c )
         {
             // MAKE SURE THAT SOLID EDGES DONT GET ASSIGNED VELOCITIES THAT NEVER CHANGE
             if( MESH[r][c-1].Fluid && MESH[r][c].Fluid )
-                MESH[r][c].u = FLOW_VEL;
+            {
+                MESH[r][c].u = FLOW_VEL_u;
+                MESH[r][c].v = FLOW_VEL_v;
+            }
+        }
+    }
+
+
+
+    // start with a converged solution
+    //Divergence( 1000, solver_opts.OVER_RELAXATION );
+
+    std::vector<cell> NEW_MESH( solver_opts.MESH_HEIGHT*solver_opts.MESH_WIDTH );
+
+    for( std::vector<cell> &ROW : MESH )
+    {
+        for( cell &CELL : ROW )
+        {
+            NEW_MESH.insert( NEW_MESH.begin(), CELL );
         }
     }
     
-    // start with a converged solution
-    Divergence( 1000, OVER_RELAXATION );
 
+
+    INCO_SOLVER solver( solver_opts, NEW_MESH ); 
+
+    Graphics graph( solver );
+
+    for( size_t step = 0; step < solver_opts.TIMESTEPS; ++step )
+    {
+
+        solver.Solve();
+
+        if( step % solver_opts.REPORT_INTERVAL == 0 )
+            graph.PrintBmp();
+
+    }
+    /* 
+
+    std::string name;
     size_t t = 0;
+
 
     while( t <= TIMESTEPS )
     {
-        ExternalForce();  // fuck gravity
-
+        //ExternalForce();  // fuck gravity
+        P.Start();
         Divergence( ITERATIONS, OVER_RELAXATION );
+        P.End();
+        cout << "Divergence step took: " << to_string( P.Elapsed_Seconds() ) << endl;
 
-        Advection();
-
+        P.Start();
+        Advection(); //aprox material derivative 
+        P.End();
+        cout << "Advection step took: " << to_string( P.Elapsed_Seconds() ) << endl;
+        
         if( t % REPORT_INTERVAL == 0 )
         {
-            std::string name = "frame_" + to_string(t) +".bmp";
+            //Lift_Report.REPORT( MESH, CELL_SIZE );
+            name = "Solution_Data_1/frame_" + to_string(t) +".bmp";
 
             Bitmap( MESH, name );
         }
 
         ++t;
     }
-
+ */
     return 0;
 }
 
+/* 
 void ExternalForce()
 {
     for( size_t r = 1; r < MESH_height; ++r )
@@ -140,41 +184,43 @@ void ExternalForce()
             MESH[r][c].v += dt * GRAVITY * ( MESH[r][c].Fluid * MESH[r-1][c].Fluid );
         }
     }
-
 }
 
 void Divergence( size_t iterations, double Relaxation )
 {
     //Profile P;
+    size_t r,c;
     #pragma omp parallel
     {
         for( size_t i = 0; i <= iterations; ++i )
         {
             
-            /* for( size_t row = 1; row < MESH_height - 1; ++row )
-            {
-            for( size_t col = 1; col < MESH_width - 1; ++col )
-            {
-
-                CellDivergence( row, col, Relaxation );
-                    
-            }
-            } */
+            //for( size_t row = 1; row < MESH_height - 1; ++row )
+            //{
+            //    for( size_t col = 1; col < MESH_width - 1; ++col )
+            //    {
+            //
+            //        CellDivergence( row, col, Relaxation );
+            //        
+           //    }
+            //} 
 
             #pragma omp for
-           for( size_t index = 0; index < MESH_height*MESH_width; index+=2 )
+           for( size_t index = 0; index < (MESH_height-1)*(MESH_width-1); index+=2 )
            {
-
-                CellDivergence( index/MESH_width, index%MESH_width, Relaxation );
+                r = index / (MESH_width-1);
+                c = index % (MESH_width-1);
+                assert( r<MESH_height && c < MESH_width );
+                CellDivergence( index/(MESH_width-1), index%(MESH_width-1), Relaxation );
 
            }
             #pragma omp barrier
 
             #pragma omp for
-            for( size_t index = 1; index < MESH_height*MESH_width; index+=2 )
+            for( size_t index = 1; index < (MESH_height-1)*(MESH_width-1); index+=2 )
             {
 
-                CellDivergence( index/MESH_width, index%MESH_width, Relaxation );
+                CellDivergence( index/(MESH_width-1), index%(MESH_width-1), Relaxation );
 
             }
 
@@ -186,7 +232,7 @@ void Divergence( size_t iterations, double Relaxation )
 void CellDivergence( const size_t &row, const size_t &col, const double &Relaxation )
 {
     //skip non fluid cells
-    if (!MESH[row][col].Fluid){ return; }
+    if ( !MESH[row][col].Fluid ){ return; }
 
     uint8_t neighbors = 0;
     double Div = 0;
@@ -211,7 +257,6 @@ void CellDivergence( const size_t &row, const size_t &col, const double &Relaxat
 
 void Advection()
 {
-    
     TEMP = MESH;
 
     double X_vert, Y_vert, X_horz, Y_horz;
@@ -266,22 +311,10 @@ void Advection()
             assert( c_vert <= MESH_width - 2 && c_vert >= 0);
 
             // get average velocities around position
-            /* 
-                if (X_horz - (double)c_horz * CELL_SIZE < 0)
-                {
-                    cout << to_string(X_horz - (double)c_horz * CELL_SIZE) << endl;
-                    cout << "r: " << to_string(r_horz) << "c: " << to_string(c_horz) << endl;
-                    cout << "X_horz: " << to_string( X_horz ) << endl;
-                }
-            assert( (X_horz - (double)c_horz * CELL_SIZE) >= 0 );
-
-            assert( ( X_horz - (double)c_horz * CELL_SIZE ) / CELL_SIZE >= 0 && ( X_horz - (double)c_horz * CELL_SIZE ) / CELL_SIZE <= 1 );
-            */
 
             TEMP[r][c].u = GetWeightedCellAverage( r_horz, c_horz, ( X_horz - MESH[r_horz][c_horz].x ) / CELL_SIZE, ( Y_horz - MESH[r_horz][c_horz].y ) / CELL_SIZE ).u;
 
             TEMP[r][c].v = GetWeightedCellAverage( r_vert, c_vert, ( X_vert - MESH[r_vert][c_vert].x ) / CELL_SIZE, ( Y_vert - MESH[r_vert][c_vert].y ) / CELL_SIZE ).v;
-
 
             TEMP[r][c].density = GetWeightedCellAverage( r_den, c_den, ( X_horz - MESH[r_den][c_den].x ) / CELL_SIZE, ( Y_vert - MESH[r_den][c_den].y ) / CELL_SIZE).density;
 
@@ -312,8 +345,6 @@ void Bitmap( vector< std::vector< cell > > & Img_Data, std::string &filename )
     cell MAX = MAX_CELL();
     cell MIN = MIN_CELL();
     
-    //assert( MAX.p != MIN.p );
-    
     MAX.u -= MIN.u * (MIN.u < 0);
     MAX.v -= MIN.v * (MIN.v < 0);
     MAX.p -= MIN.p * (MIN.p < 0);
@@ -338,8 +369,6 @@ void Bitmap( vector< std::vector< cell > > & Img_Data, std::string &filename )
 
     header.bfSize = 54 + abs(infoHeader.Width * infoHeader.Height * 3);
 
-    // extra "padding" cuz rows must be a multiple of 4 (WHYYY?)
-
     ofstream file( filename, ios::binary);
 
     header.HeaderWrite( file );
@@ -356,7 +385,7 @@ void Bitmap( vector< std::vector< cell > > & Img_Data, std::string &filename )
             VEL = sqrt( VALUE.u*VALUE.u + VALUE.v*VALUE.v );
             PRINT_VAL = ( (VALUE.p-MIN.p*(MIN.p<0)) * PRINT_P + (VALUE.u-MIN.u*(MIN.p<0)) * PRINT_U + (VALUE.v-MIN.v*(MIN.v<0)) * PRINT_V + (VALUE.divergence-MIN.divergence*(MIN.divergence<0)) * PRINT_DIV + VEL * PRINT_VEL )/BIGGEST;
 
-            if ((PRINT_VAL * 255) > 255 || (PRINT_VAL * 255) < 0)
+            if( (PRINT_VAL * 255) > 255 || (PRINT_VAL * 255) < 0 )
             {
                 cout << "PRINT_VAL: " + to_string(PRINT_VAL) << endl;
             }
@@ -378,12 +407,14 @@ void Bitmap( vector< std::vector< cell > > & Img_Data, std::string &filename )
                 pixel.Red = 0; pixel.Blue = 0; pixel.Green = 0;
             }
 
-            pixel.PixelWrite( file );
-        }
-        for( uint8_t pad = 0; pad < abs(infoHeader.Height) % 4; ++pad )
-            file.write( (char *)0, 1 ); // definitly works??!!!
-    }
 
+            pixel.PixelWrite( file );
+
+        }
+        //extra "padding" cuz rows must be a multiple of 4 (WHYYY?)
+        file.write( (char *)0, infoHeader.Width % 4 ); // pro tip width != Height
+            
+    }
 
     cout << "Saving: " << filename <<";  divergence: " << to_string( MAX.divergence ) << endl;
     
@@ -434,3 +465,4 @@ cell MAX_CELL()
     }
     return max;
 }
+ */

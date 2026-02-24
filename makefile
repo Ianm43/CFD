@@ -8,12 +8,12 @@ BUILD_DIR := build
 BIN_DIR := bin
 TARGET := $(BIN_DIR)/INCO
 SOURCES := $(wildcard $(SRC_DIR)/*.cpp)
-HEADERS := $(wildcard *.h)
+HEADERS := $(wildcard $(SRC_DIR)/*.h)
 
 
 .PHONY : all, clean
 
-all : $(TARGET) 
+all : $(TARGET) $(HEADERS) $(SOURCES)
 
 $(TARGET) : $(SOURCES) $(HEADERS)
 	@mkdir -p $(BIN_DIR)

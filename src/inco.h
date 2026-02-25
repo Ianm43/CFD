@@ -144,24 +144,27 @@ class INCO_SOLVER
         INCO_opts _opts;
         std::vector<cell> _MESH;
         std::vector<cell> _TEMP;
-        std::size_t _Step = 0; // curent time step
+        std::size_t _Step; // curent time step
 
         void ExternalForces();
         void CELLDIVERGENCE(std::size_t index);
+        void ODDCELLS();
+        void EVENCELLS();
         void Divergence();
         cell InterpolateCell(std::size_t index, double x, double y);
         void Advect();
 
-        std::size_t CoordToCell(double x, double y)
+        std::size_t CoordToCell( double x, double y )
         {
             // convert from x,y coordinates to the cell that contains those coordinates
-            return floor(y / _opts.CELL_SIZE) * _opts.MESH_WIDTH + floor(x / _opts.CELL_SIZE);
+            return floor(y / _opts.CELL_SIZE) * _opts.MESH_WIDTH + (x / _opts.CELL_SIZE);
         }
 
     public:
         // I get the feelling that an object shouldn't be passing a reference to itself to one of it's members but oh well
-        INCO_SOLVER(INCO_opts Options, std::vector<cell> &Mesh) : _opts(Options), _MESH(Mesh) {};
+        INCO_SOLVER(INCO_opts Options, std::vector<cell> &Mesh) : _opts(Options), _MESH(Mesh), _Step(0) {};
         void Solve();
+        void Initilaize();
         const cell GetMax();
         const cell GetMin();
         const cell &GetCell(size_t index);
@@ -177,9 +180,17 @@ class Graphics
     INCO_SOLVER &_SOLVER;
 
 public:
-    Graphics(INCO_SOLVER &solver): _SOLVER( solver ){};
+    Graphics( INCO_SOLVER &solver, Graphics_opts &opts ): _opts(opts), _SOLVER( solver ){};
     void PrintBmp();
 };
+
+void INCO_SOLVER::Initilaize()
+{
+    Divergence();
+    for( size_t i = 0; i < 10000 && std::abs(GetMax().divergence) > 0.02; i += _opts.ITERATIONS )
+        Divergence();
+
+}
 
 void INCO_SOLVER::ExternalForces()
 {
@@ -197,19 +208,20 @@ void INCO_SOLVER::ExternalForces()
 void INCO_SOLVER::CELLDIVERGENCE(std::size_t index)
 {
     // skip non fluid cells
+    // also protects MESH bounds
     if (!_MESH[index].Fluid)
     {
         return;
     }
 
     // neighboring cell indecies
-    std::size_t TOP = index + _opts.MESH_WIDTH;
-    std::size_t BOT = index - _opts.MESH_WIDTH;
-    std::size_t LEFT = index - 1;
-    std::size_t RIGHT = index + 1;
+    size_t TOP = index + _opts.MESH_WIDTH;
+    size_t BOT = index - _opts.MESH_WIDTH;
+    size_t LEFT = index - 1;
+    size_t RIGHT = index + 1;
 
     uint8_t neighbors = _MESH[TOP].Fluid + _MESH[LEFT].Fluid + _MESH[BOT].Fluid + _MESH[RIGHT].Fluid;
-    double Div = _MESH[index].u + _MESH[index].v - _MESH[TOP].v - _MESH[RIGHT].u;
+    double Div = - _MESH[index].u - _MESH[index].v + _MESH[TOP].v + _MESH[RIGHT].u;
 
     // store the divergence values for visualization
     _MESH[index].divergence = Div;
@@ -218,36 +230,54 @@ void INCO_SOLVER::CELLDIVERGENCE(std::size_t index)
     Div *= _opts.OVER_RELAXATION;
 
     // make the divergence of this cell 0 while leaving out boundary edges
-    _MESH[index].u -= Div * _MESH[LEFT].Fluid / neighbors;
-    _MESH[index].v -= Div * _MESH[BOT].Fluid / neighbors;
-    _MESH[RIGHT].u += Div * _MESH[RIGHT].Fluid / neighbors;
-    _MESH[TOP].v += Div * _MESH[TOP].Fluid / neighbors;
+    _MESH[index].u += Div * _MESH[LEFT].Fluid / neighbors;
+    _MESH[index].v += Div * _MESH[BOT].Fluid / neighbors;
+    _MESH[RIGHT].u -= Div * _MESH[RIGHT].Fluid / neighbors;
+    _MESH[TOP].v -= Div * _MESH[TOP].Fluid / neighbors;
 
     // estimate kinetic pressure
-    _MESH[index].p += Div / neighbors * _opts.REF_density * _opts.CELL_SIZE / _opts.TIMESTEP;
+    _MESH[index].p -= Div / neighbors * _opts.REF_density * _opts.CELL_SIZE / _opts.TIMESTEP;
 }
 
 void INCO_SOLVER::Divergence()
 {
-    //#pragma omp parallel
+    #pragma omp parallel
     {
         for (std::size_t i = 0; i <= _opts.ITERATIONS; ++i)
         {
-            //#pragma omp for
-                for (std::size_t index = 0; index < (_opts.MESH_HEIGHT - 1) * (_opts.MESH_WIDTH - 1); index += 2)
-                {
-                    CELLDIVERGENCE(index);
-                }
-            //#pragma omp barrier
+            
+            /* for( size_t index = 0; index < _MESH.size(); index++ )
+            {
 
-            //#pragma omp for
-                for (std::size_t index = 1; index < (_opts.MESH_HEIGHT - 1) * (_opts.MESH_WIDTH - 1); index += 2)
-                {
-                    CELLDIVERGENCE(index);
-                }
-            //#pragma omp barrier
+                CELLDIVERGENCE( index );
 
+            } */
+            
+            ODDCELLS();
+            
+            EVENCELLS();
+            
         }
+    }
+}
+
+void INCO_SOLVER::ODDCELLS()
+{
+    #pragma omp for
+    for (std::size_t index = 1; index < (_opts.MESH_HEIGHT) * (_opts.MESH_WIDTH); index += 2)
+    {
+        CELLDIVERGENCE(index);
+        //_MESH[index].v = 1;
+    }
+}
+
+void INCO_SOLVER::EVENCELLS()
+{
+    #pragma omp for
+    for (std::size_t index = 0; index < (_opts.MESH_HEIGHT) * (_opts.MESH_WIDTH); index += 2)
+    {
+        CELLDIVERGENCE(index);
+        //_MESH[index].v = -1;
     }
 }
 
@@ -279,7 +309,7 @@ void INCO_SOLVER::Advect()
 //#pragma omp parallel
 {
     //#pragma omp for
-        for (std::size_t index = 0; index < (_opts.MESH_HEIGHT-1) * (_opts.MESH_WIDTH-1); ++index)
+        for (std::size_t index = 0; index < (_opts.MESH_HEIGHT) * (_opts.MESH_WIDTH); ++index)
         {
 
             // ignore non-fluid cells
@@ -293,13 +323,13 @@ void INCO_SOLVER::Advect()
 
             // get average velocities around each edge and look back
 
-            X_vert = _MESH[index].x - (_MESH[index].u + _MESH[index + 1].u + _MESH[index + _opts.MESH_WIDTH].u + _MESH[index + _opts.MESH_WIDTH + 1].u) * _opts.TIMESTEP;
+            X_vert = _MESH[index].x - (_MESH[index].u + _MESH[index + 1].u + _MESH[index + _opts.MESH_WIDTH].u + _MESH[index + _opts.MESH_WIDTH + 1].u) / 4.0 * _opts.TIMESTEP;
 
             Y_vert = _MESH[index].y - _MESH[index].v * _opts.TIMESTEP;
 
             X_horz = _MESH[index].x - _MESH[index].u * _opts.TIMESTEP;
 
-            Y_horz = _MESH[index].y - ((_MESH[index].v + _MESH[index - 1].v + _MESH[index + _opts.MESH_WIDTH].v + _MESH[index + _opts.MESH_WIDTH - 1].v) / 4.0) * _opts.TIMESTEP;
+            Y_horz = _MESH[index].y - (_MESH[index].v + _MESH[index - 1].v + _MESH[index + _opts.MESH_WIDTH].v + _MESH[index + _opts.MESH_WIDTH - 1].v) / 4.0 * _opts.TIMESTEP;
 
             // round negative values to 0
             X_vert *= (X_vert > 0);
@@ -325,6 +355,7 @@ void INCO_SOLVER::Advect()
                 Y_vert = (_opts.MESH_HEIGHT-1) * _opts.CELL_SIZE;
             }
 
+
             assert( X_vert >= 0 && X_vert < _opts.MESH_WIDTH * _opts.CELL_SIZE );
 
             // temporarily store cell indecies
@@ -332,7 +363,6 @@ void INCO_SOLVER::Advect()
             v_index = CoordToCell(X_vert, Y_vert);
             density_index = CoordToCell(X_horz, Y_vert);
 
-            
 
             if( !(v_index >= 0 && v_index < _opts.MESH_HEIGHT*_opts.MESH_WIDTH) )
             {
@@ -355,13 +385,13 @@ void INCO_SOLVER::Advect()
 
 void INCO_SOLVER::Solve()
 {
-        ExternalForces();
+    _Step++;
+
+    ExternalForces();
         
-        Divergence();
+    Divergence();
         
-        Advect();
-        
-        _Step++;
+    Advect();       
 }
 const cell INCO_SOLVER::GetMax()
 {
@@ -409,9 +439,12 @@ const cell &INCO_SOLVER::GetCell(size_t index)
 void Graphics::PrintBmp()
 {
     std::string filename = "Solution_Data_2/Iteration" + std::to_string(_SOLVER.GetStep()) + ".bmp";
+    
     cell MAX = _SOLVER.GetMax();
     cell MIN = _SOLVER.GetMin();
 
+    std::cout << "v: [" << std::to_string( MIN.v ) << ", " << std::to_string( MAX.v ) << "]" << std::endl;
+    
     MAX.u -= MIN.u * (MIN.u < 0);
     MAX.v -= MIN.v * (MIN.v < 0);
     MAX.p -= MIN.p * (MIN.p < 0);
@@ -422,7 +455,9 @@ void Graphics::PrintBmp()
 
     double BIGGEST_VEL = sqrt(MAX.u * MAX.u + MAX.v * MAX.v);
     double BIGGEST = (MAX.p * _opts.PRINT_P + MAX.u * _opts.PRINT_U + MAX.v * _opts.PRINT_V + MAX.divergence * _opts.PRINT_DIV + BIGGEST_VEL * _opts.PRINT_VEL + _opts.PRINT_DEN);
-    double VEL = 0;
+    double VEL = 0; 
+
+    //assert( BIGGEST > 0 );
 
     double PRINT_VAL;
 
@@ -434,7 +469,9 @@ void Graphics::PrintBmp()
     infoHeader.horizontalResolution = 2 * abs(infoHeader.Width); // fits the image to 50 cm
     infoHeader.VerticalResolution = 2 * abs(infoHeader.Height);
 
-    header.bfSize = 54 + abs(infoHeader.Width * infoHeader.Height * 3);
+    std::string Padding( infoHeader.Width % 4 , '0');
+
+    header.bfSize = 54 + infoHeader.Width * infoHeader.Height * 3;
 
     std::ofstream file(filename, std::ios::binary);
 
@@ -445,13 +482,22 @@ void Graphics::PrintBmp()
 
     for (size_t index = 0; index < (size_t)(infoHeader.Height * infoHeader.Width); ++index)
     {
+        
         const cell &VALUE = _SOLVER.GetCell(index);
         // Assign color based on tile value
 
         VEL = sqrt(VALUE.u * VALUE.u + VALUE.v * VALUE.v);
-        PRINT_VAL = ((VALUE.p - MIN.p * (MIN.p < 0)) * _opts.PRINT_P + (VALUE.u - MIN.u * (MIN.p < 0)) * _opts.PRINT_U + (VALUE.v - MIN.v * (MIN.v < 0)) * _opts.PRINT_V + (VALUE.divergence - MIN.divergence * (MIN.divergence < 0)) * _opts.PRINT_DIV + VEL * _opts.PRINT_VEL) / BIGGEST;
 
-        if ((PRINT_VAL * 255) > 255 || (PRINT_VAL * 255) < 0)
+
+
+        PRINT_VAL = ((VALUE.p - MIN.p * (MIN.p < 0)) * _opts.PRINT_P + 
+                    (VALUE.u - MIN.u * (MIN.u < 0)) * _opts.PRINT_U + 
+                    (VALUE.v - MIN.v * (MIN.v < 0)) * _opts.PRINT_V + 
+                    (VALUE.divergence - MIN.divergence * (MIN.divergence < 0)) * _opts.PRINT_DIV + 
+                    VEL * _opts.PRINT_VEL) / BIGGEST;
+
+
+        if ( PRINT_VAL > 1 || (PRINT_VAL) < 0)
         {
             std::cout << "PRINT_VAL: " + std::to_string(PRINT_VAL) << std::endl;
         }
@@ -460,13 +506,13 @@ void Graphics::PrintBmp()
         {
             pixel.Red = (uint8_t)((PRINT_VAL * 255));
             pixel.Green = (uint8_t)((PRINT_VAL * 0));
-            pixel.Blue = (uint8_t)((255 - PRINT_VAL * 255));
+            pixel.Blue = (uint8_t)(255 - (PRINT_VAL * 255));
         }
         else
         {
             pixel.Red = (uint8_t)((VALUE.density * 255));
             pixel.Green = (uint8_t)((VALUE.density * 255));
-            pixel.Blue = (uint8_t)((VALUE.density * 255));
+            pixel.Blue = (uint8_t)((VALUE.density * 255)); 
         }
 
         if (!VALUE.Fluid)
@@ -477,10 +523,11 @@ void Graphics::PrintBmp()
         }
 
         pixel.PixelWrite(file);
-
+        
         // extra "padding" cuz rows must be a multiple of 4 (WHYYY?)
-        if (index % infoHeader.Width == 0)
-            file.write((char *)0, infoHeader.Width % 4); // pro tip width != Height
+        if(index % infoHeader.Width == (size_t)infoHeader.Width-1 )
+            file.write((char *)&Padding, infoHeader.Width % 4); // pro tip width != Height
+
     }
 
     std::cout << "Saving: " << filename << ";  divergence: " << std::to_string(MAX.divergence) << std::endl;

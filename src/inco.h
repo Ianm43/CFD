@@ -127,21 +127,22 @@ struct Graphics_opts
     bool PRINT_VEL = 0;
 };
 
+struct MESH_opts
+{
 
+    bool DRAW_ELLIPSE = true;
+    double SLOPE = 0;
+    double VERT_SQUISH = 1;
+    double FLOW_VEL_u = 1;
+    double FLOW_VEL_v = 0;
 
-/* void ExternalForce();
-void Divergence(size_t iterations, double Relaxation);
-void CellDivergence(const size_t &row, const size_t &col, const double &Relaxation);
-void Advection();
-cell MAX_CELL();
-cell MIN_CELL();
-cell GetWeightedCellAverage(size_t r, size_t c, double x, double y);
-void Bitmap(std::vector<std::vector<cell>> &Img_Data, std::string &filename); */
+};
 
 class INCO_SOLVER
 {
     private:
         INCO_opts _opts;
+        MESH_opts _mesh_opts;
         std::vector<cell> _MESH;
         std::vector<cell> _TEMP;
         std::size_t _Step; // curent time step
@@ -162,8 +163,10 @@ class INCO_SOLVER
 
     public:
         // I get the feelling that an object shouldn't be passing a reference to itself to one of it's members but oh well
-        INCO_SOLVER(INCO_opts Options, std::vector<cell> &Mesh) : _opts(Options), _MESH(Mesh), _Step(0) {};
+        INCO_SOLVER(INCO_opts Options, MESH_opts M_Options ) : 
+        _opts(Options), _mesh_opts( M_Options ), _MESH( _opts.MESH_HEIGHT*_opts.MESH_WIDTH ) , _Step(0) {};
         void Solve();
+        void Make_MESH();
         void Initilaize();
         const cell GetMax();
         const cell GetMin();
@@ -189,6 +192,84 @@ void INCO_SOLVER::Initilaize()
     Divergence();
     for( size_t i = 0; i < 10000 && std::abs(GetMax().divergence) > 0.02; i += _opts.ITERATIONS )
         Divergence();
+
+}
+
+void INCO_SOLVER::Make_MESH()
+{
+    size_t row;
+    size_t col;
+
+    double X, Y;
+
+    // super dumb way of making a skewed ellipse 
+    //for help defining varibles: https://www.desmos.com/calculator/fgdc56e9nm
+
+    double R = (float)_opts.MESH_HEIGHT * _opts.MESH_HEIGHT / 100; // semi major axis
+    double VERT_SHIFT = _opts.MESH_HEIGHT / 2;
+    double HORZ_SHIFT = _opts.MESH_WIDTH / 5;
+
+    for( size_t index = 0; index <_MESH.size(); ++index )
+    {
+        col = index % _opts.MESH_WIDTH;
+        row = index / _opts.MESH_WIDTH;
+
+       _MESH[index].x = index % _opts.MESH_WIDTH * _opts.CELL_SIZE;
+       _MESH[index].y = index / _opts.MESH_WIDTH * _opts.CELL_SIZE;
+
+        //bottom side
+        if( row == 0 )
+        {
+           _MESH[index].Fluid = 0;
+           _MESH[index].u = _mesh_opts.FLOW_VEL_u;
+           _MESH[index].v = _mesh_opts.FLOW_VEL_v;
+           _MESH[index+_opts.MESH_WIDTH].v = _mesh_opts.FLOW_VEL_v;
+        }
+
+        //top side
+        if( row == _opts.MESH_HEIGHT - 1 )
+        {
+           _MESH[index].Fluid = 0;
+           _MESH[index].u = _mesh_opts.FLOW_VEL_u;
+           _MESH[index].v = _mesh_opts.FLOW_VEL_v;
+        }
+
+        // left side
+        if( col == 0 )
+        {
+           _MESH[index].Fluid = 0;
+           _MESH[index].u = _mesh_opts.FLOW_VEL_u;
+           _MESH[index+1].u = _mesh_opts.FLOW_VEL_u;
+           _MESH[index].v = _mesh_opts.FLOW_VEL_v;
+            
+        }
+
+        // right side
+        if( col == _opts.MESH_WIDTH - 1 )
+        {
+           _MESH[index].Fluid = 0;
+           _MESH[index].u = _mesh_opts.FLOW_VEL_u;
+           _MESH[index].v = _mesh_opts.FLOW_VEL_v;
+        }
+
+        if( (row > (_opts.MESH_HEIGHT/2 - 20)) && (row < (_opts.MESH_HEIGHT/2 + 20))  && (col == 0) )
+        {
+
+           _MESH[index].density = 0.5;
+
+        }
+
+        Y = row + _mesh_opts.SLOPE * (col - HORZ_SHIFT) - VERT_SHIFT;
+
+        X = col + _mesh_opts.SLOPE * (col - HORZ_SHIFT) - HORZ_SHIFT;
+
+        if( _mesh_opts.DRAW_ELLIPSE && round((Y) * (Y)*_mesh_opts.VERT_SQUISH + (X) * (X)) <= (R))
+        {
+           _MESH[index].u = 0;
+           _MESH[index].v = 0;
+           _MESH[index].Fluid = 0;
+        }
+    }
 
 }
 
@@ -443,7 +524,7 @@ void Graphics::PrintBmp()
     cell MAX = _SOLVER.GetMax();
     cell MIN = _SOLVER.GetMin();
 
-    std::cout << "v: [" << std::to_string( MIN.v ) << ", " << std::to_string( MAX.v ) << "]" << std::endl;
+    //std::cout << "v: [" << std::to_string( MIN.v ) << ", " << std::to_string( MAX.v ) << "]" << std::endl;
     
     MAX.u -= MIN.u * (MIN.u < 0);
     MAX.v -= MIN.v * (MIN.v < 0);

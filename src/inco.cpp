@@ -11,9 +11,10 @@ int main()
     graph_opts.PRINT_VEL = 0;
     graph_opts.PRINT_P = 0;
     graph_opts.PRINT_U = 0;
-    graph_opts.PRINT_V = 1;
+    graph_opts.PRINT_V = 0;
     graph_opts.PRINT_DEN = 0;
     graph_opts.PRINT_DIV = 0;
+    graph_opts.PRINT_CURL = 1;
 
     double FLOW_VEL_u = 1;
     double FLOW_VEL_v = 0;
@@ -21,7 +22,7 @@ int main()
     //total mesh size (Height*Width) should be an odd number :)
     solver_opts.MESH_HEIGHT = 401;
     solver_opts.MESH_WIDTH = 1000;
-    solver_opts.CELL_SIZE = 1;
+    solver_opts.CELL_SIZE = 0.05;
 
     solver_opts.ITERATIONS = 40;
     solver_opts.REPORT_INTERVAL = 500;
@@ -43,15 +44,16 @@ int main()
 
     graph.PrintBmp();
 
-    for( size_t step = 0; step < solver_opts.TIMESTEPS; ++step )
+    while( solver.GetStep() <= 10000 )
     {
-
         solver.Solve();
-
-        if( step % solver_opts.REPORT_INTERVAL == 0 )
+        if( solver.GetStep() % 100 == 0 )
+        {
+            solver.CalculateCurl();
             graph.PrintBmp();
-
+        }
     }
+
     
     return 0;
 }

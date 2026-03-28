@@ -11,6 +11,8 @@
 #include <iostream>
 #include <chrono>
 
+//#include <SFML/Window.hpp>
+
 int main();
 
 struct Profile
@@ -42,6 +44,7 @@ struct cell
     double v = 0;       // y velocity in m/s
     double density = 0; // SMOKE DENSITY NOT PHYSICAL DENSITY
     double divergence = 0;
+    double curl = 0;
     double p = 0;   // estimated kinetic pressure for visulaization
     bool Fluid = 1; // pretty self explanatory
     std::string Tag = "Fluid";
@@ -125,6 +128,7 @@ struct Graphics_opts
     bool PRINT_DEN = 0;
     bool PRINT_DIV = 0;
     bool PRINT_VEL = 0;
+    bool PRINT_CURL = 0;
 };
 
 struct MESH_opts
@@ -152,8 +156,11 @@ class INCO_SOLVER
         void ODDCELLS();
         void EVENCELLS();
         void Divergence();
-        cell InterpolateCell(std::size_t index, double x, double y);
+        cell InterpolateCell( double x, double y);
         void Advect();
+        double dudy( double x, double y, double delta );
+        double dvdx( double x, double y, double delta );
+        double Curl( double x, double y, double delta );
 
         std::size_t CoordToCell( double x, double y )
         {
@@ -162,15 +169,17 @@ class INCO_SOLVER
         }
 
     public:
-        // I get the feelling that an object shouldn't be passing a reference to itself to one of it's members but oh well
+        
         INCO_SOLVER(INCO_opts Options, MESH_opts M_Options ) : 
         _opts(Options), _mesh_opts( M_Options ), _MESH( _opts.MESH_HEIGHT*_opts.MESH_WIDTH ) , _Step(0) {};
         void Solve();
         void Make_MESH();
         void Initilaize();
+        void CalculateCurl();
         const cell GetMax();
         const cell GetMin();
         const cell &GetCell(size_t index);
+        
 
         const size_t &GetMeshHeight() { return _opts.MESH_HEIGHT; }
         const size_t &GetMeshWidth() { return _opts.MESH_WIDTH; }
@@ -362,15 +371,21 @@ void INCO_SOLVER::EVENCELLS()
     }
 }
 
-cell INCO_SOLVER::InterpolateCell(std::size_t index, double x, double y)
+cell INCO_SOLVER::InterpolateCell( double x, double y )
 {
     // bi-linear cell interpolation
+    size_t index = CoordToCell( x, y );
     cell CELL;
 
-    if (index + _opts.MESH_WIDTH >= _MESH.size())
+    // skip the top row and right most collumn
+    if ( index + _opts.MESH_WIDTH >= _MESH.size() || index % _opts.MESH_WIDTH == _opts.MESH_WIDTH - 1 )
     {
         return CELL;
     }
+    
+
+    x = (x - _MESH[index].x ) / _opts.CELL_SIZE;
+    y = (y - _MESH[index].y ) / _opts.CELL_SIZE;
 
     double BL = (1 - x) * (1 - y);
     double BR = (x) * (1 - y);
@@ -382,6 +397,40 @@ cell INCO_SOLVER::InterpolateCell(std::size_t index, double x, double y)
     CELL.density = _MESH[index].density * BL + _MESH[index + 1].density * BR + _MESH[index + _opts.MESH_WIDTH].density * TL + _MESH[index + _opts.MESH_WIDTH + 1].density * TR;
 
     return CELL;
+}
+
+void INCO_SOLVER::CalculateCurl()
+{
+    const double half_cell = _opts.CELL_SIZE / 2;
+
+    for( cell &CELL : _MESH )
+    {
+        if( CELL.y < (_opts.MESH_HEIGHT-2)* _opts.CELL_SIZE )
+            CELL.curl = Curl( CELL.x + half_cell, CELL.y + half_cell, half_cell/2 );
+    }
+
+}
+
+double INCO_SOLVER::Curl( double x, double y, double delta )
+{
+
+    // curl(F) = dv/dx - du/dy
+    return dvdx( x, y, delta ) - dudy( x, y, delta );
+    
+}
+
+double INCO_SOLVER::dudy( double x, double y, double delta )
+{
+
+    return ( InterpolateCell(x,y+delta).u - InterpolateCell(x,y-delta).u ) / (2*delta);
+
+}
+
+double INCO_SOLVER::dvdx( double x, double y, double delta )
+{
+
+    return ( InterpolateCell(x+delta,y).v - InterpolateCell(x-delta,y).v ) / (2*delta);
+
 }
 
 void INCO_SOLVER::Advect()
@@ -400,7 +449,7 @@ void INCO_SOLVER::Advect()
             }
 
             double X_vert, Y_vert, X_horz, Y_horz;
-            std::size_t density_index, u_index, v_index;
+            //std::size_t density_index, u_index, v_index;
 
             // get average velocities around each edge and look back
 
@@ -418,7 +467,7 @@ void INCO_SOLVER::Advect()
             X_horz *= (X_horz > 0);
             Y_horz *= (Y_horz > 0);
 
-            // round values greater than meshh dimensions to the edge
+            // round values greater than mesh dimensions to the edge
             if (X_vert >= (_opts.MESH_WIDTH) * _opts.CELL_SIZE)
             {
                 X_vert = (_opts.MESH_WIDTH-1) * _opts.CELL_SIZE;
@@ -440,24 +489,27 @@ void INCO_SOLVER::Advect()
             assert( X_vert >= 0 && X_vert < _opts.MESH_WIDTH * _opts.CELL_SIZE );
 
             // temporarily store cell indecies
-            u_index = CoordToCell(X_horz, Y_horz);
-            v_index = CoordToCell(X_vert, Y_vert);
-            density_index = CoordToCell(X_horz, Y_vert);
+            //u_index = CoordToCell(X_horz, Y_horz);
+            //v_index = CoordToCell(X_vert, Y_vert);
+            //density_index = CoordToCell(X_horz, Y_vert);
 
 
-            if( !(v_index >= 0 && v_index < _opts.MESH_HEIGHT*_opts.MESH_WIDTH) )
-            {
-                std::cout << std::to_string( X_vert ) << ", " << std::to_string( Y_vert ) << std::endl;
-            }
+            //if( !(v_index >= 0 && v_index < _opts.MESH_HEIGHT*_opts.MESH_WIDTH) )
+            //{
+            //    std::cout << std::to_string( X_vert ) << ", " << std::to_string( Y_vert ) << std::endl;
+            //}
 
-            assert( u_index >= 0 && u_index < _opts.MESH_HEIGHT*_opts.MESH_WIDTH );
+            //assert( u_index >= 0 && u_index < _opts.MESH_HEIGHT*_opts.MESH_WIDTH );
 
-            assert( density_index >= 0 && density_index < _opts.MESH_HEIGHT*_opts.MESH_WIDTH );
+            //assert( density_index >= 0 && density_index < _opts.MESH_HEIGHT*_opts.MESH_WIDTH );
 
             // get average velocities around position
-            _TEMP[index].u = InterpolateCell(u_index, (X_horz - _MESH[u_index].x) / _opts.CELL_SIZE, (Y_horz - _MESH[u_index].y) / _opts.CELL_SIZE).u;
-            _TEMP[index].v = InterpolateCell(v_index, (X_vert - _MESH[v_index].x) / _opts.CELL_SIZE, (Y_vert - _MESH[v_index].y) / _opts.CELL_SIZE).v;
-            _TEMP[index].density = InterpolateCell(density_index, (X_horz - _MESH[density_index].x) / _opts.CELL_SIZE, (Y_vert - _MESH[density_index].y) / _opts.CELL_SIZE).density;
+            _TEMP[index].u = InterpolateCell( X_horz, Y_horz ).u;
+            _TEMP[index].v = InterpolateCell( X_vert, Y_vert ).v;
+            _TEMP[index].density = InterpolateCell( X_horz, Y_vert ).density;
+            //_TEMP[index].u = InterpolateCell(u_index, (X_horz - _MESH[u_index].x) / _opts.CELL_SIZE, (Y_horz - _MESH[u_index].y) / _opts.CELL_SIZE).u;
+            //_TEMP[index].v = InterpolateCell(v_index, (X_vert - _MESH[v_index].x) / _opts.CELL_SIZE, (Y_vert - _MESH[v_index].y) / _opts.CELL_SIZE).v;
+            //_TEMP[index].density = InterpolateCell(density_index, (X_horz - _MESH[density_index].x) / _opts.CELL_SIZE, (Y_vert - _MESH[density_index].y) / _opts.CELL_SIZE).density;
         }
     //#pragma omp barrier
 }
@@ -489,6 +541,8 @@ const cell INCO_SOLVER::GetMax()
             max.density = CELL.density;
         if (CELL.divergence > max.divergence)
             max.divergence = CELL.divergence;
+        if (CELL.curl > max.curl)
+            max.curl = CELL.curl;
     }
     return max;
 }
@@ -508,6 +562,8 @@ const cell INCO_SOLVER::GetMin()
             min.density = CELL.density;
         if (CELL.divergence < min.divergence)
             min.divergence = CELL.divergence;
+        if ( CELL.curl < min.curl ) 
+            min.curl = CELL.curl;
     }
     return min;
 }
@@ -531,11 +587,12 @@ void Graphics::PrintBmp()
     MAX.p -= MIN.p * (MIN.p < 0);
     MAX.density -= MIN.density * (MIN.density < 0);
     MAX.divergence -= MIN.divergence * (MIN.divergence < 0);
+    MAX.curl -= MIN.curl * (MIN.curl < 0);
 
     //assert(MAX.divergence < 1 && "Divergence should not be this high");
 
     double BIGGEST_VEL = sqrt(MAX.u * MAX.u + MAX.v * MAX.v);
-    double BIGGEST = (MAX.p * _opts.PRINT_P + MAX.u * _opts.PRINT_U + MAX.v * _opts.PRINT_V + MAX.divergence * _opts.PRINT_DIV + BIGGEST_VEL * _opts.PRINT_VEL + _opts.PRINT_DEN);
+    double BIGGEST = (MAX.p * _opts.PRINT_P + MAX.u * _opts.PRINT_U + MAX.v * _opts.PRINT_V + MAX.divergence * _opts.PRINT_DIV + MAX.curl * _opts.PRINT_CURL + BIGGEST_VEL * _opts.PRINT_VEL + _opts.PRINT_DEN );
     double VEL = 0; 
 
     //assert( BIGGEST > 0 );
@@ -575,6 +632,7 @@ void Graphics::PrintBmp()
                     (VALUE.u - MIN.u * (MIN.u < 0)) * _opts.PRINT_U + 
                     (VALUE.v - MIN.v * (MIN.v < 0)) * _opts.PRINT_V + 
                     (VALUE.divergence - MIN.divergence * (MIN.divergence < 0)) * _opts.PRINT_DIV + 
+                    (VALUE.curl - MIN.curl * (MIN.curl < 0)) * _opts.PRINT_CURL +
                     VEL * _opts.PRINT_VEL) / BIGGEST;
 
 

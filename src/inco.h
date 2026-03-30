@@ -196,6 +196,17 @@ public:
     void PrintBmp();
 };
 
+void INCO_SOLVER::Solve()
+{
+    _Step++;
+
+    ExternalForces();
+        
+    Divergence();
+        
+    Advect();       
+}
+
 void INCO_SOLVER::Initilaize()
 {
     Divergence();
@@ -336,13 +347,6 @@ void INCO_SOLVER::Divergence()
         for (std::size_t i = 0; i <= _opts.ITERATIONS; ++i)
         {
             
-            /* for( size_t index = 0; index < _MESH.size(); index++ )
-            {
-
-                CELLDIVERGENCE( index );
-
-            } */
-            
             ODDCELLS();
             
             EVENCELLS();
@@ -353,21 +357,32 @@ void INCO_SOLVER::Divergence()
 
 void INCO_SOLVER::ODDCELLS()
 {
+
     #pragma omp for
-    for (std::size_t index = 1; index < (_opts.MESH_HEIGHT) * (_opts.MESH_WIDTH); index += 2)
+    for( std::size_t row = 0; row < _opts.MESH_HEIGHT; ++row )
     {
-        CELLDIVERGENCE(index);
-        //_MESH[index].v = 1;
+        for( std::size_t col = (row%2==1) ; col < _opts.MESH_WIDTH; col += 2 )
+    {
+
+            CELLDIVERGENCE( row*_opts.MESH_WIDTH + col );
+
+        }
     }
+
 }
 
 void INCO_SOLVER::EVENCELLS()
 {
-    #pragma omp for
-    for (std::size_t index = 0; index < (_opts.MESH_HEIGHT) * (_opts.MESH_WIDTH); index += 2)
+
+   #pragma omp for
+    for( std::size_t row = 0; row < _opts.MESH_HEIGHT; ++row )
     {
-        CELLDIVERGENCE(index);
-        //_MESH[index].v = -1;
+        for( std::size_t col = (row%2==0); col < _opts.MESH_WIDTH; col  += 2)
+        {
+
+            CELLDIVERGENCE( row*_opts.MESH_WIDTH + col );
+
+        }
     }
 }
 
@@ -383,7 +398,7 @@ cell INCO_SOLVER::InterpolateCell( double x, double y )
         return CELL;
     }
     
-
+    // obtain 0-1 weights from x and y
     x = (x - _MESH[index].x ) / _opts.CELL_SIZE;
     y = (y - _MESH[index].y ) / _opts.CELL_SIZE;
 
@@ -516,16 +531,7 @@ void INCO_SOLVER::Advect()
     _MESH = _TEMP;
 }
 
-void INCO_SOLVER::Solve()
-{
-    _Step++;
 
-    ExternalForces();
-        
-    Divergence();
-        
-    Advect();       
-}
 const cell INCO_SOLVER::GetMax()
 {
     cell max;

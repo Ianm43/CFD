@@ -299,9 +299,9 @@ void INCO_SOLVER::ExternalForces()
     //#pragma omp parallel
     {
         //#pragma omp for
-        for (std::size_t index = 0; index < (_opts.MESH_HEIGHT - 1) * (_opts.MESH_WIDTH - 1); ++index)
+        for (std::size_t index = _opts.MESH_WIDTH; index < (_opts.MESH_HEIGHT - 1) * (_opts.MESH_WIDTH - 1); ++index)
         {
-            _MESH[index].v += _opts.GRAVITY * dt * _MESH[index].Fluid;
+            _MESH[index].v += _opts.GRAVITY * dt * (_MESH[index].Fluid && _MESH[index-_opts.MESH_WIDTH].Fluid);
         }
         //#pragma omp barrier
     }
@@ -349,7 +349,7 @@ void INCO_SOLVER::Divergence()
         {
             
             ODDCELLS();
-            
+            #pragma omp barrier
             EVENCELLS();
             
         }

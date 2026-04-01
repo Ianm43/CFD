@@ -6,9 +6,11 @@ inco, or incompressible, Is my first naive implementation of discretization tech
 
 The basic flow of the sovler is as follows:
 
-  1. Manipulate the properties of the continuum to allign with our governing equations. ( Div($$\vec{u}$$) = 0 )
+  1. update cell veloceites due to external forces(gravity)
 
-  2. Propagate the properties throught the continuum. ( Advection )
+  2. Manipulate the properties of the continuum to allign with our governing equations. ( Div($$\vec{u}$$) = 0 )
+
+  3. Propagate the properties throught the continuum. ( Advection )
 
 Divergence:
 

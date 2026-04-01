@@ -19,3 +19,17 @@ Advection:
   To approximate the time rate of change of our fluid we will utilize a rather simple scheme called semi-lagrangian advection. This scheme treats the tranport of continuum properties as the physical movement of a parcel to which those propeties belong. This is where the name "semi-Lagrangian" comes from, since lagrangiean simulations discritize the fluid domain as a bunch of parcels of fluid that move around ( carrying their properties with them ), whereas Eulerian simulations discritize the domain as a mesh of static* cells whose properites move around. As it turns out it tends to be much easier to describe the motion of coninuum properties from the lagrangian perspective. Semi-lagrangian advection takes advantage of this by essentially pretending that there is a fluid parcel that will move to the exact position of our eulerian cell carrying it's properties with it. To implement this idea in code we need an approximate velocity for each storage point in each cell( remember cell velocities are stored on the edges ), then we step backwards from the storage point using our approximated velocites to some arbitrary point in the mesh. This point will be where we draw our updated properites from but the chances of this point actually lying on one of our "storage points" is essentailly zero so we need a way to approximate our continuum properties at any arbitrary point within the mesh. This is where cell interpolation comes in.
 
 Interpolation: 
+
+
+
+Usage:
+
+  To use this "Sovler" you will need to set the solver and mesh settings, and then compile. currently there is no settings file, that is the next big update.
+
+  Make commands:
+
+  make bin/INCO: compiles INCO.exe
+
+  make all: compiles INCO.exe
+
+  make run: complies and then executes INCO.exe

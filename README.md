@@ -28,8 +28,8 @@ Usage:
 
   Make commands:
 
-  make bin/INCO: compiles INCO.exe
+  1. make bin/INCO: compiles INCO.exe
 
-  make all: compiles INCO.exe
+  2. make all: compiles INCO.exe
 
-  make run: complies and then executes INCO.exe
+  3. make run: complies and then executes INCO.exe

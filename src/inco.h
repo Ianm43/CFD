@@ -1,7 +1,6 @@
 #ifndef INCO_H
 #define INCO_H
 
-#include <stdint.h>
 #include <cmath>
 
 #include <cstdint>
@@ -52,16 +51,14 @@ struct cell
 
 struct INCO_opts
 {
-    size_t TIMESTEPS = 10;
     size_t ITERATIONS = 40;
-    size_t REPORT_INTERVAL = 100;
     double CELL_SIZE = 0.01;
     size_t MESH_WIDTH = 100;
     size_t MESH_HEIGHT = 100;
     double OVER_RELAXATION = 1.9;
     double GRAVITY = 0;
     double REF_density = 1.225;
-    double TIMESTEP = 0.01;
+    double CFL = 0.1;
 };
 
 struct Force
@@ -149,7 +146,8 @@ class INCO_SOLVER
         MESH_opts _mesh_opts;
         std::vector<cell> _MESH;
         std::vector<cell> _TEMP;
-        std::size_t _Step; // curent time step
+        double dt = 0.01;
+        std::size_t _Step = 0; // curent time step
 
         void ExternalForces();
         void CELLDIVERGENCE(std::size_t index);
@@ -157,6 +155,7 @@ class INCO_SOLVER
         void EVENCELLS();
         void Divergence();
         cell InterpolateCell( double x, double y);
+        void StableTimeStep();
         void Advect();
         double dudy( double x, double y, double delta );
         double dvdx( double x, double y, double delta );
@@ -171,7 +170,7 @@ class INCO_SOLVER
     public:
         
         INCO_SOLVER(INCO_opts Options, MESH_opts M_Options ) : 
-        _opts(Options), _mesh_opts( M_Options ), _MESH( _opts.MESH_HEIGHT*_opts.MESH_WIDTH ) , _Step(0) {};
+        _opts(Options), _mesh_opts( M_Options ), _MESH( _opts.MESH_HEIGHT*_opts.MESH_WIDTH ) {};
         void Solve();
         void Make_MESH();
         void Initilaize();
@@ -199,6 +198,8 @@ public:
 void INCO_SOLVER::Solve()
 {
     _Step++;
+
+    StableTimeStep();
 
     ExternalForces();
         
@@ -300,7 +301,7 @@ void INCO_SOLVER::ExternalForces()
         //#pragma omp for
         for (std::size_t index = 0; index < (_opts.MESH_HEIGHT - 1) * (_opts.MESH_WIDTH - 1); ++index)
         {
-            _MESH[index].v += _opts.GRAVITY * _opts.TIMESTEP * _MESH[index].Fluid;
+            _MESH[index].v += _opts.GRAVITY * dt * _MESH[index].Fluid;
         }
         //#pragma omp barrier
     }
@@ -337,7 +338,7 @@ void INCO_SOLVER::CELLDIVERGENCE(std::size_t index)
     _MESH[TOP].v -= Div * _MESH[TOP].Fluid / neighbors;
 
     // estimate kinetic pressure
-    _MESH[index].p -= Div / neighbors * _opts.REF_density * _opts.CELL_SIZE / _opts.TIMESTEP;
+    _MESH[index].p -= Div / neighbors * _opts.REF_density * _opts.CELL_SIZE / dt;
 }
 
 void INCO_SOLVER::Divergence()
@@ -362,7 +363,7 @@ void INCO_SOLVER::ODDCELLS()
     for( std::size_t row = 0; row < _opts.MESH_HEIGHT; ++row )
     {
         for( std::size_t col = (row%2==1) ; col < _opts.MESH_WIDTH; col += 2 )
-    {
+        {
 
             CELLDIVERGENCE( row*_opts.MESH_WIDTH + col );
 
@@ -412,6 +413,20 @@ cell INCO_SOLVER::InterpolateCell( double x, double y )
     CELL.density = _MESH[index].density * BL + _MESH[index + 1].density * BR + _MESH[index + _opts.MESH_WIDTH].density * TL + _MESH[index + _opts.MESH_WIDTH + 1].density * TR;
 
     return CELL;
+    
+}
+
+void INCO_SOLVER::StableTimeStep()
+{
+    double max_speed = 0;
+    double temp_speed = 0;
+    for( const cell &CELL : _MESH )
+    {
+        temp_speed = std::sqrt( ( CELL.u*CELL.u + CELL.v*CELL.v ) );
+        if( max_speed < temp_speed )
+            max_speed = temp_speed;
+    }
+    dt = ( _opts.CFL * _opts.CELL_SIZE ) / max_speed;
 }
 
 void INCO_SOLVER::CalculateCurl()
@@ -468,13 +483,13 @@ void INCO_SOLVER::Advect()
 
             // get average velocities around each edge and look back
 
-            X_vert = _MESH[index].x - (_MESH[index].u + _MESH[index + 1].u + _MESH[index + _opts.MESH_WIDTH].u + _MESH[index + _opts.MESH_WIDTH + 1].u) / 4.0 * _opts.TIMESTEP;
+            X_vert = _MESH[index].x - (_MESH[index].u + _MESH[index + 1].u + _MESH[index + _opts.MESH_WIDTH].u + _MESH[index + _opts.MESH_WIDTH + 1].u) / 4.0 * dt;
 
-            Y_vert = _MESH[index].y - _MESH[index].v * _opts.TIMESTEP;
+            Y_vert = _MESH[index].y - _MESH[index].v * dt;
 
-            X_horz = _MESH[index].x - _MESH[index].u * _opts.TIMESTEP;
+            X_horz = _MESH[index].x - _MESH[index].u * dt;
 
-            Y_horz = _MESH[index].y - (_MESH[index].v + _MESH[index - 1].v + _MESH[index + _opts.MESH_WIDTH].v + _MESH[index + _opts.MESH_WIDTH - 1].v) / 4.0 * _opts.TIMESTEP;
+            Y_horz = _MESH[index].y - (_MESH[index].v + _MESH[index - 1].v + _MESH[index + _opts.MESH_WIDTH].v + _MESH[index + _opts.MESH_WIDTH - 1].v) / 4.0 * dt;
 
             // round negative values to 0
             X_vert *= (X_vert > 0);

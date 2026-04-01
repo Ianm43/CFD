@@ -1,7 +1,5 @@
 CXX := g++
 MOC := moc
-CXXFLAGS := -O3 -g -std=c++23 -Wall -fopenmp
-
 
 SRC_DIR := src
 BUILD_DIR := build
@@ -10,6 +8,7 @@ TARGET := $(BIN_DIR)/INCO
 SOURCES := $(wildcard $(SRC_DIR)/*.cpp)
 HEADERS := $(wildcard $(SRC_DIR)/*.h)
 
+CXXFLAGS := -O3 -g -std=c++23 -Wall -fopenmp
 
 .PHONY : all, clean
 

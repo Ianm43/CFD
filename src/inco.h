@@ -148,6 +148,7 @@ class INCO_SOLVER
         std::vector<cell> _TEMP;
         double dt = 0.01;
         std::size_t _Step = 0; // curent time step
+        double h;
 
         void ExternalForces();
         void CELLDIVERGENCE(std::size_t index);
@@ -431,21 +432,20 @@ void INCO_SOLVER::StableTimeStep()
 
 void INCO_SOLVER::CalculateCurl()
 {
-    const double half_cell = _opts.CELL_SIZE / 2;
 
     for( cell &CELL : _MESH )
     {
         if( CELL.y < (_opts.MESH_HEIGHT-2)* _opts.CELL_SIZE )
-            CELL.curl = Curl( CELL.x + half_cell, CELL.y + half_cell, half_cell/2 );
+            CELL.curl = Curl( CELL.x + h, CELL.y + h );
     }
 
 }
 
-double INCO_SOLVER::Curl( double x, double y, double delta )
+double INCO_SOLVER::Curl( double x, double y )
 {
 
     // curl(F) = dv/dx - du/dy
-    return dvdx( x, y, delta ) - dudy( x, y, delta );
+    return dvdx( x, y, h/2 ) - dudy( x, y, h/2 );
     
 }
 

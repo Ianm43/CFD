@@ -35,6 +35,12 @@ struct Profile
     }
 };
 
+struct vec
+{
+    double x;
+    double y;
+};
+
 struct cell
 {
     double x = 0; // x coordinate of the bottom left vertex
@@ -160,18 +166,14 @@ class INCO_SOLVER
         void Advect();
         double dudy( double x, double y, double delta );
         double dvdx( double x, double y, double delta );
-        double Curl( double x, double y, double delta );
+        double Curl( double x, double y );
 
-        std::size_t CoordToCell( double x, double y )
-        {
-            // convert from x,y coordinates to the cell that contains those coordinates
-            return floor(y / _opts.CELL_SIZE) * _opts.MESH_WIDTH + (x / _opts.CELL_SIZE);
-        }
+        std::size_t CoordToCell(double x, double y);
 
     public:
         
         INCO_SOLVER(INCO_opts Options, MESH_opts M_Options ) : 
-        _opts(Options), _mesh_opts( M_Options ), _MESH( _opts.MESH_HEIGHT*_opts.MESH_WIDTH ) {};
+        _opts(Options), _mesh_opts( M_Options ), _MESH( _opts.MESH_HEIGHT*_opts.MESH_WIDTH ), h( _opts.CELL_SIZE / 2 ) {};
         void Solve();
         void Make_MESH();
         void Initilaize();
@@ -195,6 +197,26 @@ public:
     Graphics( INCO_SOLVER &solver, Graphics_opts &opts ): _opts(opts), _SOLVER( solver ){};
     void PrintBmp();
 };
+
+std::size_t INCO_SOLVER::CoordToCell(double x, double y)
+{
+    // round negative values to 0
+    x *= !(x < 0);
+    y *= !(y < 0);
+
+    // round values greater than mesh dimensions to the edge
+    if (x > (_opts.MESH_WIDTH - 1) * _opts.CELL_SIZE)
+    {
+        x = (_opts.MESH_WIDTH - 1) * _opts.CELL_SIZE;
+    }
+    if (y > (_opts.MESH_HEIGHT - 1) * _opts.CELL_SIZE)
+    {
+        y = (_opts.MESH_HEIGHT - 1) * _opts.CELL_SIZE;
+    }
+
+    // convert from x,y coordinates to the cell that contains those coordinates
+    return floor(y / _opts.CELL_SIZE) * _opts.MESH_WIDTH + (x / _opts.CELL_SIZE);
+}
 
 void INCO_SOLVER::Solve()
 {
@@ -297,6 +319,7 @@ void INCO_SOLVER::Make_MESH()
 
 void INCO_SOLVER::ExternalForces()
 {
+    if( _opts.GRAVITY == 0 ){ return; }
     //#pragma omp parallel
     {
         //#pragma omp for
@@ -312,7 +335,7 @@ void INCO_SOLVER::CELLDIVERGENCE(std::size_t index)
 {
     // skip non fluid cells
     // also protects MESH bounds
-    if (!_MESH[index].Fluid)
+    if ( !_MESH[index].Fluid || index % _opts.MESH_WIDTH == _opts.MESH_WIDTH - 1 )
     {
         return;
     }
@@ -350,7 +373,7 @@ void INCO_SOLVER::Divergence()
         {
             
             ODDCELLS();
-            #pragma omp barrier
+            
             EVENCELLS();
             
         }
@@ -479,49 +502,26 @@ void INCO_SOLVER::Advect()
             }
 
             double X_vert, Y_vert, X_horz, Y_horz;
+            //vec vert, horz;
             //std::size_t density_index, u_index, v_index;
 
             // get average velocities around each edge and look back
 
-            X_vert = _MESH[index].x - (_MESH[index].u + _MESH[index + 1].u + _MESH[index + _opts.MESH_WIDTH].u + _MESH[index + _opts.MESH_WIDTH + 1].u) / 4.0 * dt;
+            //vert = Advect_Step_Back( _TEMP[index].x, _TEMP[index].y + h, _TEMP[index].u, _TEMP[index].v );
 
-            Y_vert = _MESH[index].y - _MESH[index].v * dt;
+            //horz = Advect_Step_Back( _TEMP[index].x + h, _TEMP[index].y, _TEMP[index].u, _TEMP[index].v );
 
-            X_horz = _MESH[index].x - _MESH[index].u * dt;
+            X_vert = _TEMP[index].x - InterpolateCell( _TEMP[index].x, _TEMP[index].y + h ).u * dt;
 
-            Y_horz = _MESH[index].y - (_MESH[index].v + _MESH[index - 1].v + _MESH[index + _opts.MESH_WIDTH].v + _MESH[index + _opts.MESH_WIDTH - 1].v) / 4.0 * dt;
+            Y_vert = _TEMP[index].y - _TEMP[index].v * dt;
 
-            // round negative values to 0
-            X_vert *= (X_vert > 0);
-            Y_vert *= (Y_vert > 0);
-            X_horz *= (X_horz > 0);
-            Y_horz *= (Y_horz > 0);
+            X_horz = _TEMP[index].x - _TEMP[index].u * dt;
 
-            // round values greater than mesh dimensions to the edge
-            if (X_vert >= (_opts.MESH_WIDTH) * _opts.CELL_SIZE)
-            {
-                X_vert = (_opts.MESH_WIDTH-1) * _opts.CELL_SIZE;
-            }
-            if (X_horz >= (_opts.MESH_WIDTH) * _opts.CELL_SIZE)
-            {
-                X_horz = (_opts.MESH_WIDTH-1) * _opts.CELL_SIZE;
-            }
-            if (Y_horz >= (_opts.MESH_HEIGHT) * _opts.CELL_SIZE)
-            {
-                Y_horz = (_opts.MESH_HEIGHT-1) * _opts.CELL_SIZE;
-            }
-            if (Y_vert >= (_opts.MESH_HEIGHT) * _opts.CELL_SIZE)
-            {
-                Y_vert = (_opts.MESH_HEIGHT-1) * _opts.CELL_SIZE;
-            }
+            Y_horz = _TEMP[index].y - InterpolateCell( _TEMP[index].x + h, _TEMP[index].y ).v * dt;
 
-
-            assert( X_vert >= 0 && X_vert < _opts.MESH_WIDTH * _opts.CELL_SIZE );
-
-            // temporarily store cell indecies
-            //u_index = CoordToCell(X_horz, Y_horz);
-            //v_index = CoordToCell(X_vert, Y_vert);
-            //density_index = CoordToCell(X_horz, Y_vert);
+            
+            //assert( X_vert >= 0 );
+            //assert( X_vert < _opts.MESH_WIDTH * _opts.CELL_SIZE );
 
 
             //if( !(v_index >= 0 && v_index < _opts.MESH_HEIGHT*_opts.MESH_WIDTH) )
@@ -534,16 +534,15 @@ void INCO_SOLVER::Advect()
             //assert( density_index >= 0 && density_index < _opts.MESH_HEIGHT*_opts.MESH_WIDTH );
 
             // get average velocities around position
-            _TEMP[index].u = InterpolateCell( X_horz, Y_horz ).u;
-            _TEMP[index].v = InterpolateCell( X_vert, Y_vert ).v;
-            _TEMP[index].density = InterpolateCell( X_horz, Y_vert ).density;
-            //_TEMP[index].u = InterpolateCell(u_index, (X_horz - _MESH[u_index].x) / _opts.CELL_SIZE, (Y_horz - _MESH[u_index].y) / _opts.CELL_SIZE).u;
-            //_TEMP[index].v = InterpolateCell(v_index, (X_vert - _MESH[v_index].x) / _opts.CELL_SIZE, (Y_vert - _MESH[v_index].y) / _opts.CELL_SIZE).v;
-            //_TEMP[index].density = InterpolateCell(density_index, (X_horz - _MESH[density_index].x) / _opts.CELL_SIZE, (Y_vert - _MESH[density_index].y) / _opts.CELL_SIZE).density;
+
+
+            _MESH[index].u = InterpolateCell( X_horz, Y_horz ).u;
+            _MESH[index].v = InterpolateCell( X_vert, Y_vert ).v;
+            _MESH[index].density = InterpolateCell( X_horz, Y_vert ).density;
         }
     //#pragma omp barrier
 }
-    _MESH = _TEMP;
+
 }
 
 

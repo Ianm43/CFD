@@ -215,7 +215,9 @@ std::size_t INCO_SOLVER::CoordToCell(double x, double y)
     }
 
     // convert from x,y coordinates to the cell that contains those coordinates
-    return floor(y / _opts.CELL_SIZE) * _opts.MESH_WIDTH + (x / _opts.CELL_SIZE);
+    // increase each coordinate by one thousandth of half a cell because floating point error...
+    // there's got to be a better way to do this, but oh well
+    return floor( (y+h/1000) / _opts.CELL_SIZE ) * (_opts.MESH_WIDTH) + floor((x+h/1000) / _opts.CELL_SIZE);
 }
 
 void INCO_SOLVER::Solve()

@@ -48,6 +48,7 @@ struct cell
     double v = 0;       // y velocity in m/s
     double density = 0; // SMOKE DENSITY NOT PHYSICAL DENSITY
     double divergence = 0;
+    double time_residual = 0;
     double curl = 0;
     double p = 0;   // estimated kinetic pressure for visulaization
     bool Fluid = 1; // pretty self explanatory
@@ -162,7 +163,10 @@ class INCO_SOLVER
         void Divergence();
         cell InterpolateCell( double x, double y);
         void StableTimeStep();
+        vec Advect_Step_Back( double x, double y, double dx, double dy );
         void Advect();
+
+
         double dudy( double x, double y, double delta );
         double dvdx( double x, double y, double delta );
         double Curl( double x, double y );
@@ -575,38 +579,60 @@ double INCO_SOLVER::dvdx( double x, double y, double delta )
 
 }
 
+vec INCO_SOLVER::Advect_Step_Back( double x, double y, double dx, double dy )
+{
+    // find the departure point
+    vec VAL;
+    vec LastVAL;
+    cell TEMP_CELL;
+    VAL.x = dx;
+    VAL.y = dy;
+
+    for( size_t i = 0; i < 100; ++i )
+    {
+        LastVAL = VAL;
+        TEMP_CELL = InterpolateCell( x - VAL.x, y - VAL.y );
+        VAL.x = dt * TEMP_CELL.u;
+        VAL.y = dt * TEMP_CELL.v;
+        if( std::fabs(LastVAL.x - VAL.x) < 0.00005 && std::fabs(LastVAL.y - VAL.y) < 0.00005 )
+            return VAL; 
+    }
+
+    return VAL;
+}
+
 void INCO_SOLVER::Advect()
 {
     _TEMP = _MESH;
 //#pragma omp parallel
 {
     //#pragma omp for
-        for (std::size_t index = 0; index < (_opts.MESH_HEIGHT) * (_opts.MESH_WIDTH); ++index)
+        for (std::size_t index = 0; index < (_opts.MESH_HEIGHT-1) * (_opts.MESH_WIDTH-1); ++index)
         {
 
             // ignore non-fluid cells
-            if (!_MESH[index].Fluid)
+            if(!_MESH[index].Fluid || !_MESH[index-1].Fluid || !_MESH[index-_opts.MESH_WIDTH].Fluid )
             {
                 continue;
             }
 
             double X_vert, Y_vert, X_horz, Y_horz;
-            //vec vert, horz;
+            vec vert, horz;
             //std::size_t density_index, u_index, v_index;
 
-            // get average velocities around each edge and look back
+            //get average velocities around each edge and look back
 
-            //vert = Advect_Step_Back( _TEMP[index].x, _TEMP[index].y + h, _TEMP[index].u, _TEMP[index].v );
+            vert = Advect_Step_Back( _TEMP[index].x + h, _TEMP[index].y, InterpolateCell(_TEMP[index].x + h,_TEMP[index].y).u*dt, _TEMP[index].v*dt );
 
-            //horz = Advect_Step_Back( _TEMP[index].x + h, _TEMP[index].y, _TEMP[index].u, _TEMP[index].v );
+            horz = Advect_Step_Back( _TEMP[index].x, _TEMP[index].y + h, _TEMP[index].u*dt, InterpolateCell(_TEMP[index].x,_TEMP[index].y + h).v*dt );
 
-            X_vert = _TEMP[index].x - InterpolateCell( _TEMP[index].x, _TEMP[index].y + h ).u * dt;
+            X_vert = _TEMP[index].x - vert.x + h;//InterpolateCell( _TEMP[index].x, _TEMP[index].y + h ).u * dt;
 
-            Y_vert = _TEMP[index].y - _TEMP[index].v * dt;
+            Y_vert = _TEMP[index].y - vert.y;//_TEMP[index].v * dt;
 
-            X_horz = _TEMP[index].x - _TEMP[index].u * dt;
+            X_horz = _TEMP[index].x - horz.x;//_TEMP[index].u * dt;
 
-            Y_horz = _TEMP[index].y - InterpolateCell( _TEMP[index].x + h, _TEMP[index].y ).v * dt;
+            Y_horz = _TEMP[index].y - horz.y + h;//InterpolateCell( _TEMP[index].x + h, _TEMP[index].y ).v * dt;
 
             
             //assert( X_vert >= 0 );
@@ -625,7 +651,11 @@ void INCO_SOLVER::Advect()
             // get average velocities around position
 
 
+
             _MESH[index].u = InterpolateCell( X_horz, Y_horz ).u;
+
+            _MESH[index].time_residual = _MESH[index].x - X_horz - _MESH[index].u * dt;
+
             _MESH[index].v = InterpolateCell( X_vert, Y_vert ).v;
             _MESH[index].density = InterpolateCell( X_horz, Y_vert ).density;
         }
@@ -652,6 +682,8 @@ const cell INCO_SOLVER::GetMax()
             max.divergence = CELL.divergence;
         if (CELL.curl > max.curl)
             max.curl = CELL.curl;
+        if( CELL.time_residual > max.time_residual )
+            max.time_residual = CELL.time_residual;
     }
     return max;
 }

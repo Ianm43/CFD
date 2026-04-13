@@ -10,7 +10,6 @@
 #include <iostream>
 #include <chrono>
 
-//#include <SFML/Window.hpp>
 
 int main();
 
@@ -181,6 +180,7 @@ class INCO_SOLVER
         const cell GetMax();
         const cell GetMin();
         const cell &GetCell(size_t index);
+        std::vector<cell> InterpolateMesh( size_t Pix_Per_Cell );
         
 
         const size_t &GetMeshHeight() { return _opts.MESH_HEIGHT; }
@@ -201,17 +201,17 @@ public:
 std::size_t INCO_SOLVER::CoordToCell(double x, double y)
 {
     // round negative values to 0
-    x *= !(x < 0);
-    y *= !(y < 0);
+    x *= (x >= 0);
+    y *= (y >= 0);
 
     // round values greater than mesh dimensions to the edge
-    if (x > (_opts.MESH_WIDTH - 1) * _opts.CELL_SIZE)
+    if (x > ( _opts.MESH_WIDTH ) * _opts.CELL_SIZE)
     {
-        x = (_opts.MESH_WIDTH - 1) * _opts.CELL_SIZE;
+        x = ( _opts.MESH_WIDTH ) * _opts.CELL_SIZE;
     }
-    if (y > (_opts.MESH_HEIGHT - 1) * _opts.CELL_SIZE)
+    if (y > ( _opts.MESH_HEIGHT ) * _opts.CELL_SIZE)
     {
-        y = (_opts.MESH_HEIGHT - 1) * _opts.CELL_SIZE;
+        y = ( _opts.MESH_HEIGHT ) * _opts.CELL_SIZE;
     }
 
     // convert from x,y coordinates to the cell that contains those coordinates

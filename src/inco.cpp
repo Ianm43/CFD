@@ -22,7 +22,12 @@ int main()
     solver_opts.MESH_WIDTH = 1000;
     solver_opts.CELL_SIZE = 0.05;
 
-    solver_opts.ITERATIONS = 100;
+    mesh_options.DRAW_ELLIPSE = true;
+    
+    mesh_options.FLOW_VEL_u = 1;
+    mesh_options.FLOW_VEL_v = 0;
+
+    solver_opts.ITERATIONS = 30;
     solver_opts.OVER_RELAXATION = 1.9;
     solver_opts.CFL = 0.5;
     solver_opts.GRAVITY = -2;

@@ -417,29 +417,116 @@ cell INCO_SOLVER::InterpolateCell( double x, double y )
 {
     // bi-linear cell interpolation
     size_t index = CoordToCell( x, y );
+
+    if( !_TEMP[index].Fluid )
+    {
+        return _TEMP[index];
+    }
+
     cell CELL;
 
     // skip the top row and right most collumn
-    if ( index + _opts.MESH_WIDTH >= _MESH.size() || index % _opts.MESH_WIDTH == _opts.MESH_WIDTH - 1 )
-    {
-        return CELL;
-    }
+    // if ( index + _opts.MESH_WIDTH >= _TEMP.size() || index % _opts.MESH_WIDTH == _opts.MESH_WIDTH - 1  || index <= _opts.MESH_WIDTH )
+    // {
+    //     return CELL;
+    // }
     
     // obtain 0-1 weights from x and y
-    x = (x - _MESH[index].x ) / _opts.CELL_SIZE;
-    y = (y - _MESH[index].y ) / _opts.CELL_SIZE;
+    double x_new, y_new, BL, BR,TL,TR;
 
-    double BL = (1 - x) * (1 - y);
-    double BR = (x) * (1 - y);
-    double TL = (1 - x) * (y);
-    double TR = x * y;
 
-    CELL.u = _MESH[index].u * BL + _MESH[index + 1].u * BR + _MESH[index + _opts.MESH_WIDTH].u * TL + _MESH[index + _opts.MESH_WIDTH + 1].u * TR;
-    CELL.v = _MESH[index].v * BL + _MESH[index + 1].v * BR + _MESH[index + _opts.MESH_WIDTH].v * TL + _MESH[index + _opts.MESH_WIDTH + 1].v * TR;
-    CELL.density = _MESH[index].density * BL + _MESH[index + 1].density * BR + _MESH[index + _opts.MESH_WIDTH].density * TL + _MESH[index + _opts.MESH_WIDTH + 1].density * TR;
+    //correct for the veloceties being stored at cell edge centers
+    if( (y - _TEMP[index].y ) >= h )
+    {
+
+         x_new = (x - _TEMP[index].x ) / _opts.CELL_SIZE;
+         y_new = (y - h - _TEMP[index].y ) / _opts.CELL_SIZE;
+
+         BL = (1 - x_new) * (1 - y_new);
+         BR = (x_new) * (1 - y_new);
+         TL = (1 - x_new) * y_new;
+         TR = x_new * y_new;
+
+        if( BL > 1.1 )
+        {
+            std::cout << "BL: " << std::to_string(BL) << std::endl;
+            std::cout << "y: " << std::to_string(y) << std::endl;
+            std::cout << "MESH_y: " << std::to_string(_TEMP[index].y) << std::endl;
+            std::cout << "new_y: " << std::to_string(y_new) << std::endl;
+            std::cout << "x: " << std::to_string(x) << std::endl;
+            std::cout << "MESH_x: " << std::to_string(_TEMP[index].x) << std::endl;
+            std::cout << "new_x: " << std::to_string(x_new) << std::endl;
+            std::cout << "index: " << std::to_string(index) << std::endl;
+            assert( BL <= 1.1 && BL > -0.1 );
+        }
+
+        CELL.u = _TEMP[index].u * ( BL ) + _TEMP[index + 1].u * ( BR ) + _TEMP[index + _opts.MESH_WIDTH].u * ( TL) + _TEMP[index + _opts.MESH_WIDTH + 1].u * ( TR );
+    }
+    else
+    {
+
+        index -= _opts.MESH_WIDTH;
+         x_new = (x - _TEMP[index].x ) / _opts.CELL_SIZE;
+         y_new = (y - h - _TEMP[index].y ) / _opts.CELL_SIZE;
+
+         BL = (1 - x_new) * (1 - y_new);
+         BR = (x_new) * (1 - y_new);
+         TL = (1 - x_new) * y_new;
+         TR = x_new * y_new;
+
+        if( BL > 1.1 || BL < -0.1 )
+        {
+            std::cout << "BL: " << std::to_string(BL) << std::endl;
+            std::cout << "y: " << std::to_string(y) << std::endl;
+            std::cout << "MESH_y: " << std::to_string(_TEMP[index].y) << std::endl;
+            std::cout << "new_y: " << std::to_string(y_new) << std::endl;
+            std::cout << "x: " << std::to_string(x) << std::endl;
+            std::cout << "MESH_x: " << std::to_string(_TEMP[index].x) << std::endl;
+            std::cout << "new_x: " << std::to_string(x_new) << std::endl;
+            assert( BL <= 1.1 && BL > -0.1 );
+        }
+
+        CELL.u = _TEMP[index].u * ( BL ) + _TEMP[index + 1].u * ( BR ) + _TEMP[index + _opts.MESH_WIDTH].u * ( TL) + _TEMP[index + _opts.MESH_WIDTH + 1].u * ( TR );
+        index += _opts.MESH_WIDTH;
+    }
+
+    if( (x - _TEMP[index].x ) >= h )
+    {
+         x_new = (x - h - _TEMP[index].x ) / _opts.CELL_SIZE;
+         y_new = (y - _TEMP[index].y ) / _opts.CELL_SIZE;
+
+         BL = (1 - x_new) * (1 - y_new);
+         BR = (x_new) * (1 - y_new);
+         TL = (1 - x_new) * y_new;
+         TR = x_new * y_new;
+        CELL.v = _TEMP[index].v * ( BL) + _TEMP[index + 1].v * (BR) + _TEMP[index + _opts.MESH_WIDTH].v * (TL) + _TEMP[index + _opts.MESH_WIDTH + 1].v * (TR);
+    }
+    else
+    {
+        index -= 1;
+         x_new = (x - h - _TEMP[index].x ) / _opts.CELL_SIZE;
+         y_new = (y - _TEMP[index].y ) / _opts.CELL_SIZE;
+
+         BL = (1 - x_new) * (1 - y_new);
+         BR = (x_new) * (1 - y_new);
+         TL = (1 - x_new) * y_new;
+         TR = x_new * y_new;
+        
+        CELL.v = _TEMP[index].v * ( BL) + _TEMP[index + 1].v * (BR) + _TEMP[index + _opts.MESH_WIDTH].v * (TL) + _TEMP[index + _opts.MESH_WIDTH + 1].v * (TR);
+        index += 1;
+    }
+
+    x = (x - _TEMP[index].x ) / _opts.CELL_SIZE;
+    y = (y - _TEMP[index].y ) / _opts.CELL_SIZE;
+
+    BL = (1 - x) * (1 - y);
+    BR = (x) * (1 - y);
+    TL = (1 - x) * y;
+    TR = x * y;
+
+    CELL.density = _TEMP[index].density * BL + _TEMP[index + 1].density * BR + _TEMP[index + _opts.MESH_WIDTH].density * TL + _TEMP[index + _opts.MESH_WIDTH + 1].density * TR;
 
     return CELL;
-    
 }
 
 void INCO_SOLVER::StableTimeStep()

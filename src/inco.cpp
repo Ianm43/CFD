@@ -16,11 +16,12 @@ int main()
     graph_opts.PRINT_DIV = 0;
     graph_opts.PRINT_CURL = 0;
 
+    graph_opts.PixelsPerCell = 2;
 
     //total mesh size (Height*Width) should be an odd number :)
     solver_opts.MESH_HEIGHT = 400;
     solver_opts.MESH_WIDTH = 1000;
-    solver_opts.CELL_SIZE = 0.05;
+    solver_opts.CELL_SIZE = 0.005;
 
     mesh_options.DRAW_ELLIPSE = true;
     
@@ -29,21 +30,25 @@ int main()
 
     solver_opts.ITERATIONS = 30;
     solver_opts.OVER_RELAXATION = 1.9;
-    solver_opts.CFL = 0.5;
-    solver_opts.GRAVITY = -2;
+    solver_opts.CFL = 1;
+    solver_opts.GRAVITY = 0;
+    // this setting is broken
+    solver_opts.VC = 0;
 
 
     
     INCO_SOLVER solver( solver_opts, mesh_options );
 
+    Graphics graph( solver, graph_opts );
+
     solver.Make_MESH();
 
     solver.Initilaize();
+    
+    graph.PrintBmp();
 
-    Graphics graph( solver, graph_opts );
-
-
-    while( solver.GetStep() <= 3000 )
+    
+    while( solver.GetStep() <= 10000 )
     {
         solver.Solve();
         if( solver.GetStep() % 100 == 0 )
@@ -52,7 +57,7 @@ int main()
             graph.PrintBmp();
         }
     }
-
+    
     
     return 0;
 }

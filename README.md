@@ -35,3 +35,6 @@ Usage:
   2. make all: compiles INCO.exe
 
   3. make run: complies and then executes INCO.exe
+
+
+  Advection Notes: [text](https://twister.caps.ou.edu/CFD2007/Chapter6.pdf)
